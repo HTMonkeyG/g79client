@@ -1,0 +1,30 @@
+{
+  "name": "g79client",
+  "version": "2.0.0",
+  "description": "网易我的世界 G79 客户端库（JavaScript 重构版，零运行时依赖）",
+  "main": "main.js",
+  "bin": {
+    "g79client": "main.js"
+  },
+  "type": "commonjs",
+  "files": [
+    "main.js",
+    "src"
+  ],
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "start": "node main.js",
+    "test": "node --test",
+    "check": "node --check main.js && node --check src/index.js"
+  },
+  "keywords": [
+    "netease",
+    "minecraft",
+    "g79",
+    "x19",
+    "client"
+  ],
+  "license": "AGPL-3.0-only"
+}
