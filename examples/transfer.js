@@ -1,8 +1,8 @@
-'use strict';
+"use strict";
 
-/** 传输服务器列表示例（对应 Go legacy-go/example/transfer）。 */
+/** Transfer server list example (mirrors Go legacy-go/example/transfer). */
 
-const g79client = require('../index');
+const g79client = require("../src/index.js");
 
 async function run() {
   const servers = await g79client.GetGlobalG79TransferServers();

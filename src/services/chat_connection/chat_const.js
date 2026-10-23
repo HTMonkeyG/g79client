@@ -1,7 +1,7 @@
-'use strict';
+"use strict";
 
 /**
- * 聊天服务器协议常量（对应 Go 版本 service/chat_connection/chat_const.go）。
+ * Chat server protocol constants (mirrors Go service/chat_connection/chat_const.go).
  */
 
 const OPChatPrivate = 1;

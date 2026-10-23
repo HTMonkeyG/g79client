@@ -1,46 +1,46 @@
-'use strict';
+"use strict";
 
 /**
- * MPay 用户与 Sauth 数据（对应 Go 版本 account/mpay/user.go）。
+ * MPay user and Sauth data (mirrors Go account/mpay/user.go).
  */
 
-const { randomHex } = require('./random');
+const { randomHex } = require("./random.js");
 
-const AIM_INFO = '{"aim":"127.0.0.1","country":"CN","tz":"+0800","tzid":""}';
+const AIM_INFO = "{\"aim\":\"127.0.0.1\",\"country\":\"CN\",\"tz\":\"+0800\",\"tzid\":\"\"}";
 
 function randomHexUpperString(byteLen) {
   try {
     return randomHex(byteLen).toUpperCase();
   } catch (err) {
-    return '0'.repeat(byteLen * 2);
+    return "0".repeat(byteLen * 2);
   }
 }
 
-/** 构建 sauth 数据（字段顺序与 Go 结构体保持一致）。 */
+/** Build sauth data (field order matches the Go struct). */
 function newSauth(deviceID, sdkuid, sessionID, udid, isGuest) {
   return {
     aim_info: AIM_INFO,
-    app_channel: 'netease',
+    app_channel: "netease",
     client_login_sn: randomHexUpperString(16),
     deviceid: deviceID,
-    gameid: 'x19',
-    gas_token: '',
-    get_access_token: '1',
-    ip: '127.0.0.1',
+    gameid: "x19",
+    gas_token: "",
+    get_access_token: "1",
+    ip: "127.0.0.1",
     is_unisdk_guest: isGuest ? 1 : 0,
-    login_channel: 'netease',
-    platform: 'pc',
-    sdk_version: '3.9.0',
+    login_channel: "netease",
+    platform: "pc",
+    sdk_version: "3.9.0",
     sdkuid: sdkuid,
     sessionid: sessionID,
-    source_app_channel: 'netease',
-    source_platform: 'pc',
+    source_app_channel: "netease",
+    source_platform: "pc",
     udid: udid,
   };
 }
 
 class User {
-  constructor({ sauth, mac, isGuest, ram, rom, email = '', password = '' }) {
+  constructor({ sauth, mac, isGuest, ram, rom, email = "", password = "" }) {
     this.sauth = sauth;
     this.mac = mac;
     this.isGuest = Boolean(isGuest);
@@ -50,7 +50,7 @@ class User {
     this.password = password;
   }
 
-  /** 生成可用于 Client.g79AuthenticateWithCookie 的 JSON 字符串。 */
+  /** Build the JSON string accepted by Client.g79AuthenticateWithCookie. */
   cookieString() {
     return JSON.stringify({
       sauth_json: JSON.stringify(this.sauth),
@@ -70,7 +70,7 @@ class User {
     return out;
   }
 
-  // Go 风格别名
+  // Go-style aliases
   CookieString() {
     return this.cookieString();
   }

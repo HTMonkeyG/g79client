@@ -1,11 +1,11 @@
-'use strict';
+"use strict";
 
 /**
- * 认证流程（对应 Go 版本 auth.go）。
- * 这些函数会被挂载到 Client.prototype 上，因此内部使用 this 访问客户端状态。
+ * Authentication flows (mirrors Go auth.go).
+ * These functions are mounted on Client.prototype and use `this` to access client state.
  */
 
-const crypto = require('node:crypto');
+const crypto = require("node:crypto");
 
 const {
   g79HttpEncrypt,
@@ -14,13 +14,13 @@ const {
   x19HttpDecrypt,
   calculateDynamicToken,
   getValidJSON,
-} = require('./crypto');
+} = require("./crypto.js");
 const {
   randomBytes,
   hexDecode,
   hexEncode,
-} = require('./utils/bytes');
-const { peAuthSign } = require('./utils/encryption');
+} = require("./utils/bytes.js");
+const { peAuthSign } = require("./utils/encryption.js");
 const {
   g79AndroidStep,
   g79AndroidStep2,
@@ -28,48 +28,48 @@ const {
   g79SignatureHash,
   g79AndroidMessageTag,
   x19DefaultVersion,
-} = require('./engine_consts');
-const runtime = require('./runtime');
-const { toBool, toInt, toStr } = require('./types');
+} = require("./engine_consts.js");
+const runtime = require("./runtime.js");
+const { toBool, toInt, toStr } = require("./types.js");
 
 // ---------------------------------------------------------------------------
-// Cookie 解析辅助
+// Cookie parsing helpers
 // ---------------------------------------------------------------------------
 
 function parseCookieData(cookieStr) {
   let cookie;
   try {
-    cookie = typeof cookieStr === 'string' ? JSON.parse(cookieStr) : cookieStr;
+    cookie = typeof cookieStr === "string" ? JSON.parse(cookieStr) : cookieStr;
   } catch (err) {
     throw new Error(`解析Cookie失败: ${err.message}`);
   }
-  if (!cookie || typeof cookie !== 'object') {
-    throw new Error('解析Cookie失败: cookie 必须是 JSON 对象');
+  if (!cookie || typeof cookie !== "object") {
+    throw new Error("解析Cookie失败: cookie 必须是 JSON 对象");
   }
 
   let sauth = cookie.sauth_json;
-  if (typeof sauth === 'string') {
+  if (typeof sauth === "string") {
     try {
       sauth = JSON.parse(sauth);
     } catch (err) {
       throw new Error(`解析SauthJSON失败: ${err.message}`);
     }
   }
-  if (!sauth || typeof sauth !== 'object') {
-    throw new Error('解析SauthJSON失败: sauth_json 必须存在');
+  if (!sauth || typeof sauth !== "object") {
+    throw new Error("解析SauthJSON失败: sauth_json 必须存在");
   }
-  return { cookie, sauth, sauthString: typeof cookie.sauth_json === 'string' ? cookie.sauth_json : JSON.stringify(sauth) };
+  return { cookie, sauth, sauthString: typeof cookie.sauth_json === "string" ? cookie.sauth_json : JSON.stringify(sauth) };
 }
 
 function macAddress(cookie) {
   let mac = toStr(cookie.mac_addr).trim().toUpperCase();
-  if (mac === '') return '02:00:00:00:00:00';
-  mac = mac.replace(/-/g, ':');
+  if (mac === "") return "02:00:00:00:00:00";
+  mac = mac.replace(/-/g, ":");
   return mac;
 }
 
 function ramValue(cookie) {
-  return toStr(cookie.ram).trim() === '' ? '4294967296' : toStr(cookie.ram);
+  return toStr(cookie.ram).trim() === "" ? "4294967296" : toStr(cookie.ram);
 }
 
 function romValue(cookie) {
@@ -85,38 +85,38 @@ function emulatorFlag(cookie) {
 }
 
 function generateClientLoginSN() {
-  return randomBytes(16).toString('hex').toUpperCase();
+  return randomBytes(16).toString("hex").toUpperCase();
 }
 
 function buildAndroidSauthPayload(sauthData, clientLoginSN) {
   let aimInfo = toStr(sauthData.aim_info).trim();
-  if (aimInfo === '') {
-    aimInfo = '{"aim":"127.0.0.1","country":"CN","tz":"+0800","tzid":"","celluar_ip":"","operator":"","is_vpn_enabled":"false"}';
+  if (aimInfo === "") {
+    aimInfo = "{\"aim\":\"127.0.0.1\",\"country\":\"CN\",\"tz\":\"+0800\",\"tzid\":\"\",\"celluar_ip\":\"\",\"operator\":\"\",\"is_vpn_enabled\":\"false\"}";
   }
   let sdkVersion = toStr(sauthData.sdk_version).trim();
-  if (sdkVersion === '') sdkVersion = '5.9.0';
+  if (sdkVersion === "") sdkVersion = "5.9.0";
   let ip = toStr(sauthData.ip).trim();
-  if (ip === '') ip = '127.0.0.1';
+  if (ip === "") ip = "127.0.0.1";
   let gameID = toStr(sauthData.gameid).trim();
-  if (gameID === '') gameID = 'x19';
+  if (gameID === "") gameID = "x19";
 
   return {
     aim_info: aimInfo,
-    app_channel: 'netease',
+    app_channel: "netease",
     client_login_sn: clientLoginSN,
     deviceid: toStr(sauthData.deviceid),
     gameid: gameID,
     gas_token: toStr(sauthData.gas_token),
-    get_access_token: '1',
+    get_access_token: "1",
     ip,
     is_unisdk_guest: 0,
-    login_channel: 'netease',
-    platform: 'ad',
+    login_channel: "netease",
+    platform: "ad",
     sdk_version: sdkVersion,
     sdkuid: toStr(sauthData.sdkuid),
     sessionid: toStr(sauthData.sessionid),
-    source_app_channel: 'netease',
-    source_platform: 'ad',
+    source_app_channel: "netease",
+    source_platform: "ad",
     step: g79AndroidStep,
     step2: g79AndroidStep2,
     udid: toStr(sauthData.udid),
@@ -125,40 +125,40 @@ function buildAndroidSauthPayload(sauthData, clientLoginSN) {
 
 function buildAndroidSaDataPayload(client, sauthData, cookieData) {
   let sdkVersion = toStr(sauthData.sdk_version).trim();
-  if (sdkVersion === '') sdkVersion = '5.9.0';
+  if (sdkVersion === "") sdkVersion = "5.9.0";
   let udid = toStr(sauthData.udid);
-  if (udid.trim() === '') udid = '0000000000000000';
+  if (udid.trim() === "") udid = "0000000000000000";
 
   return {
-    app_channel: 'netease',
+    app_channel: "netease",
     app_ver: client.g79LatestVersion,
-    core_num: 'u0004',
-    cpu_digit: '64',
-    cpu_hz: '2465600',
-    cpu_name: 'placeholder',
-    device_height: '900',
-    device_model: 'SAMSUNG#SM-G977N',
-    device_width: '1600',
-    disk: '',
+    core_num: "u0004",
+    cpu_digit: "64",
+    cpu_hz: "2465600",
+    cpu_name: "placeholder",
+    device_height: "900",
+    device_model: "SAMSUNG#SM-G977N",
+    device_width: "1600",
+    disk: "",
     emulator: emulatorFlag(cookieData),
     first_udid: udid,
     is_guest: isGuestFlag(cookieData),
-    launcher_type: 'PE_C++',
+    launcher_type: "PE_C++",
     mac_addr: macAddress(cookieData),
-    network: 'mm_10086',
-    os_name: 'android',
-    os_ver: '5.1.1',
+    network: "mm_10086",
+    os_name: "android",
+    os_ver: "5.1.1",
     ram: ramValue(cookieData),
     rom: romValue(cookieData),
     root: false,
     sdk_ver: sdkVersion,
-    start_type: 'default',
+    start_type: "default",
     udid,
   };
 }
 
 // ---------------------------------------------------------------------------
-// G79 PE 认证
+// G79 PE authentication
 // ---------------------------------------------------------------------------
 
 async function g79AuthenticateWithCookie(cookieStr) {
@@ -183,10 +183,10 @@ async function g79AuthenticateWithCookie(cookieStr) {
 
 async function g79PerformPEAuthWithCookie(sauthData, cookieData) {
   if (!sauthData) {
-    throw new Error('缺少 sauth 数据');
+    throw new Error("缺少 sauth 数据");
   }
   if (!this.g79LatestVersion || !this.patchResourcesHash) {
-    throw new Error('缺少补丁信息，请重新初始化客户端');
+    throw new Error("缺少补丁信息，请重新初始化客户端");
   }
 
   const required = {
@@ -196,7 +196,7 @@ async function g79PerformPEAuthWithCookie(sauthData, cookieData) {
     deviceid: sauthData.deviceid,
   };
   for (const [field, value] of Object.entries(required)) {
-    if (toStr(value).trim() === '') {
+    if (toStr(value).trim() === "") {
       throw new Error(`sauth_json 缺少字段 ${field}`);
     }
   }
@@ -215,7 +215,7 @@ async function g79PerformPEAuthWithCookie(sauthData, cookieData) {
 
   const peauth = {
     engine_version: this.engineVersion,
-    extra_param: 'extra',
+    extra_param: "extra",
     message: versionMessage,
     patch_version: this.g79LatestVersion,
     pay_channel: g79AndroidMessageTag,
@@ -225,21 +225,21 @@ async function g79PerformPEAuthWithCookie(sauthData, cookieData) {
     sign,
   };
 
-  const payload = Buffer.from(JSON.stringify(peauth), 'utf8');
+  const payload = Buffer.from(JSON.stringify(peauth), "utf8");
   const encryptedPayload = g79HttpEncrypt(payload);
 
   const url = `${this.releaseJSON.coreServerUrl}/pe-authentication`;
   const res = await this.request(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'User-Agent': 'libhttpclient/1.0.0.0',
-      'Accept-Encoding': 'gzip',
-      'Content-Type': 'application/json',
+      "User-Agent": "libhttpclient/1.0.0.0",
+      "Accept-Encoding": "gzip",
+      "Content-Type": "application/json",
     },
     body: hexEncode(encryptedPayload),
   });
 
-  const respBody = res.body.toString('utf8');
+  const respBody = res.body.toString("utf8");
   let decryptedResp;
   try {
     decryptedResp = g79HttpDecrypt(hexDecode(respBody));
@@ -250,9 +250,9 @@ async function g79PerformPEAuthWithCookie(sauthData, cookieData) {
 
   let loginResp;
   try {
-    loginResp = JSON.parse(validJSON.toString('utf8'));
+    loginResp = JSON.parse(validJSON.toString("utf8"));
   } catch (err) {
-    throw new Error(`解析登录响应失败: ${err.message}, 响应内容: ${validJSON.toString('utf8')}`);
+    throw new Error(`解析登录响应失败: ${err.message}, 响应内容: ${validJSON.toString("utf8")}`);
   }
 
   if (toInt(loginResp.code) !== 0) {
@@ -261,7 +261,7 @@ async function g79PerformPEAuthWithCookie(sauthData, cookieData) {
 
   const entity = loginResp.entity || {};
   this.setCredentials(entity.entity_id, entity.token);
-  this.seed = entity.seed ?? '';
+  this.seed = entity.seed ?? "";
   return this;
 }
 
@@ -283,7 +283,7 @@ async function g79AuthenticateWithPeAuth(peAuthHexStr) {
 
   let peAuthData;
   try {
-    peAuthData = JSON.parse(peAuthBytes.toString('utf8'));
+    peAuthData = JSON.parse(peAuthBytes.toString("utf8"));
   } catch (err) {
     throw new Error(`解析 PeAuth JSON 失败: ${err.message}`);
   }
@@ -296,7 +296,7 @@ async function g79AuthenticateWithPeAuth(peAuthHexStr) {
 }
 
 // ---------------------------------------------------------------------------
-// X19 认证
+// X19 authentication
 // ---------------------------------------------------------------------------
 
 async function x19AuthenticateWithCookie(cookieStr) {
@@ -305,16 +305,16 @@ async function x19AuthenticateWithCookie(cookieStr) {
 
   const loginURL = `${this.x19ReleaseJSON.coreServerUrl}/login-otp`;
   const loginRes = await this.request(loginURL, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'User-Agent': 'libhttpclient/1.0.0.0',
-      'Accept-Encoding': 'gzip',
-      'Content-Type': 'application/json',
+      "User-Agent": "libhttpclient/1.0.0.0",
+      "Accept-Encoding": "gzip",
+      "Content-Type": "application/json",
     },
     body: cookieStr,
   });
 
-  const respBody = loginRes.body.toString('utf8');
+  const respBody = loginRes.body.toString("utf8");
   let loginResp;
   try {
     loginResp = JSON.parse(respBody);
@@ -326,31 +326,31 @@ async function x19AuthenticateWithCookie(cookieStr) {
   }
   const otpEntity = loginResp.entity || {};
   if (!otpEntity.otp_token) {
-    throw new Error('登录响应缺少 otp_token');
+    throw new Error("登录响应缺少 otp_token");
   }
 
   const saData = {
-    os_name: 'windows',
-    os_ver: 'Microsoft Windows 10',
-    mac_addr: 'B8975A4AD616',
-    udid: 'BFEBFBFF000306A9C78C00D8',
+    os_name: "windows",
+    os_ver: "Microsoft Windows 10",
+    mac_addr: "B8975A4AD616",
+    udid: "BFEBFBFF000306A9C78C00D8",
     app_ver: x19DefaultVersion,
-    sdk_ver: '',
-    network: '',
-    disk: 'C78C00D8',
-    is64bit: '1',
-    video_card1: 'Video_card1',
-    video_card2: '',
-    video_card3: '',
-    video_card4: '',
-    launcher_type: 'PC_java',
-    pay_channel: '4399pc',
-    dotnet_ver: '4.8.0',
-    cpu_type: 'Intel(R) Xeon(R) CPU i32100 3.10GHz',
-    ram_size: '8553332736',
-    device_width: '1920',
-    device_height: '1080',
-    os_detail: '10',
+    sdk_ver: "",
+    network: "",
+    disk: "C78C00D8",
+    is64bit: "1",
+    video_card1: "Video_card1",
+    video_card2: "",
+    video_card3: "",
+    video_card4: "",
+    launcher_type: "PC_java",
+    pay_channel: "4399pc",
+    dotnet_ver: "4.8.0",
+    cpu_type: "Intel(R) Xeon(R) CPU i32100 3.10GHz",
+    ram_size: "8553332736",
+    device_width: "1920",
+    device_height: "1080",
+    os_detail: "10",
   };
   const saDataJSON = JSON.stringify(saData);
 
@@ -380,16 +380,16 @@ async function x19AuthenticateWithCookie(cookieStr) {
   };
 
   const authPayload = JSON.stringify(authData);
-  const encryptedAuthPayload = x19HttpEncrypt(Buffer.from(authPayload, 'utf8'));
+  const encryptedAuthPayload = x19HttpEncrypt(Buffer.from(authPayload, "utf8"));
 
   const authRes = await this.request(`${this.x19ReleaseJSON.coreServerUrl}/authentication-otp`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'User-Agent': 'libhttpclient/1.0.0.0',
-      'Accept-Encoding': 'gzip',
-      'Content-Type': 'application/json',
-      'user-id': '',
-      'user-token': calculateDynamicToken('/authentication-otp', authPayload, ''),
+      "User-Agent": "libhttpclient/1.0.0.0",
+      "Accept-Encoding": "gzip",
+      "Content-Type": "application/json",
+      "user-id": "",
+      "user-token": calculateDynamicToken("/authentication-otp", authPayload, ""),
     },
     body: encryptedAuthPayload,
   });
@@ -404,7 +404,7 @@ async function x19AuthenticateWithCookie(cookieStr) {
 
   let loginRespData;
   try {
-    loginRespData = JSON.parse(validAuthRespJSON.toString('utf8'));
+    loginRespData = JSON.parse(validAuthRespJSON.toString("utf8"));
   } catch (err) {
     throw new Error(`解析登录响应失败: ${err.message}`);
   }
@@ -414,7 +414,7 @@ async function x19AuthenticateWithCookie(cookieStr) {
 
   const entity = loginRespData.entity || {};
   this.setCredentials(entity.entity_id, entity.token);
-  this.seed = entity.seed ?? '';
+  this.seed = entity.seed ?? "";
 
   let detail;
   try {
@@ -433,7 +433,7 @@ async function x19AuthenticateWithCookie(cookieStr) {
 
 function requireUserDetail(client) {
   if (!client.userDetail || !client.userDetail.name) {
-    throw new Error('用户信息未初始化，请先完成认证');
+    throw new Error("用户信息未初始化，请先完成认证");
   }
   return client.userDetail;
 }
@@ -441,71 +441,71 @@ function requireUserDetail(client) {
 function buildAuthV2(client, sidKind, serverID, clientKey, options = {}) {
   const detail = requireUserDetail(client);
   if (!serverID) {
-    throw new Error('serverID 不能为空');
+    throw new Error("serverID 不能为空");
   }
   const authv2 = {
-    bit: '64',
-    clientKey: String(clientKey ?? ''),
+    bit: "64",
+    clientKey: String(clientKey ?? ""),
     displayName: detail.name,
     engineVersion: client.engineVersion,
     netease_sid: `${String(serverID)}:${sidKind}`,
-    os_name: options.pc ? 'windows' : runtime.getOSName(),
-    patchVersion: options.pc ? '' : client.g79LatestVersion,
+    os_name: options.pc ? "windows" : runtime.getOSName(),
+    patchVersion: options.pc ? "" : client.g79LatestVersion,
     uid: client.getUserIdInt(),
   };
   if (options.pc) {
-    authv2.pcCheck = '0';
-    authv2.platform = 'pc';
+    authv2.pcCheck = "0";
+    authv2.platform = "pc";
   }
   return JSON.stringify(authv2);
 }
 
 function generateRentalGameAuthV2(serverID, clientKey) {
-  return buildAuthV2(this, 'RentalGame', serverID, clientKey);
+  return buildAuthV2(this, "RentalGame", serverID, clientKey);
 }
 
 function generateDomainGameAuthV2(serverID, clientKey) {
-  return buildAuthV2(this, 'DomainGame', serverID, clientKey);
+  return buildAuthV2(this, "DomainGame", serverID, clientKey);
 }
 
 function generatePCDomainGameAuthV2(serverID, clientKey) {
-  return buildAuthV2(this, 'DomainGame', serverID, clientKey, { pc: true });
+  return buildAuthV2(this, "DomainGame", serverID, clientKey, { pc: true });
 }
 
 function generateLobbyGameAuthV2(roomID, clientKey) {
-  return buildAuthV2(this, 'LobbyGame', roomID, clientKey);
+  return buildAuthV2(this, "LobbyGame", roomID, clientKey);
 }
 
 function generatePCLobbyGameAuthV2(roomID, clientKey) {
-  return buildAuthV2(this, 'LobbyGame', roomID, clientKey, { pc: true });
+  return buildAuthV2(this, "LobbyGame", roomID, clientKey, { pc: true });
 }
 
 function generateNetworkGameAuthV2(roomID, clientKey) {
-  return buildAuthV2(this, 'NetworkGame', roomID, clientKey);
+  return buildAuthV2(this, "NetworkGame", roomID, clientKey);
 }
 
 async function sendAuthV2Request(authv2Data) {
-  const api = '/authentication-v2';
-  const payload = Buffer.isBuffer(authv2Data) ? authv2Data : Buffer.from(String(authv2Data), 'utf8');
+  const api = "/authentication-v2";
+  const payload = Buffer.isBuffer(authv2Data) ? authv2Data : Buffer.from(String(authv2Data), "utf8");
 
   const encryptedData = g79HttpEncrypt(payload);
-  const token = calculateDynamicToken(api, payload.toString('utf8'), this.userToken);
+  const token = calculateDynamicToken(api, payload.toString("utf8"), this.userToken);
 
   const res = await this.request(`${this.releaseJSON.authServerUrl}${api}`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'User-Agent': 'libhttpclient/1.0.0.0',
-      'Accept-Encoding': 'gzip',
-      'Content-Type': 'application/json',
-      'user-id': this.userId,
-      'user-token': hexEncode(Buffer.from(token, 'utf8')),
+      "User-Agent": "libhttpclient/1.0.0.0",
+      "Accept-Encoding": "gzip",
+      "Content-Type": "application/json",
+      "user-id": this.userId,
+      "user-token": hexEncode(Buffer.from(token, "utf8")),
     },
     body: hexEncode(encryptedData),
   });
 
-  const respBody = res.body.toString('utf8');
+  const respBody = res.body.toString("utf8");
   const decryptedResp = g79HttpDecrypt(hexDecode(respBody));
-  return getValidJSON(decryptedResp).toString('utf8');
+  return getValidJSON(decryptedResp).toString("utf8");
 }
 
 module.exports = {
@@ -520,7 +520,7 @@ module.exports = {
   generatePCLobbyGameAuthV2,
   generateNetworkGameAuthV2,
   sendAuthV2Request,
-  // 便于测试
+  // Test helpers
   parseCookieData,
   buildAndroidSauthPayload,
   buildAndroidSaDataPayload,

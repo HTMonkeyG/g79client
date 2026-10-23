@@ -1,12 +1,12 @@
-'use strict';
+"use strict";
 
-/** 异步工具：异步队列（模拟 Go channel）与超时控制。 */
+/** Async utilities: async queue (Go channel replacement) and timeout control. */
 
 class AsyncQueue {
   /**
    * @param {object} [options]
-   * @param {number} [options.capacity=0] 0 表示无容量限制
-   * @param {boolean} [options.dropWhenFull=false] 队列满时是否丢弃新元素
+   * @param {number} [options.capacity=0] 0 means unlimited
+   * @param {boolean} [options.dropWhenFull=false] Whether to drop new items when the queue is full
    */
   constructor(options = {}) {
     this.capacity = options.capacity || 0;
@@ -16,7 +16,7 @@ class AsyncQueue {
     this.closed = false;
   }
 
-  /** 入队；返回是否成功。 */
+  /** Enqueue; returns whether it succeeded. */
   push(value) {
     if (this.closed) return false;
     if (this.capacity > 0 && this.items.length >= this.capacity) {
@@ -31,7 +31,7 @@ class AsyncQueue {
     return true;
   }
 
-  /** 关闭队列；已入队的元素仍可被读取。 */
+  /** Close the queue; already enqueued items can still be read. */
   close() {
     if (this.closed) return;
     this.closed = true;
@@ -40,7 +40,7 @@ class AsyncQueue {
     }
   }
 
-  /** 读取下一个元素。 */
+  /** Read the next item. */
   next() {
     if (this.items.length > 0) {
       return Promise.resolve({ value: this.items.shift(), done: false });
@@ -61,19 +61,19 @@ class AsyncQueue {
   }
 }
 
-/** 延时。 */
+/** Delay. */
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * 为 Promise 增加超时与 AbortSignal 支持。
+ * Add timeout and AbortSignal support to a Promise.
  * @param {Promise} promise
  * @param {number} ms
  * @param {AbortSignal|null} [signal]
  * @param {string} [message]
  */
-function withTimeout(promise, ms, signal = null, message = 'operation timed out') {
+function withTimeout(promise, ms, signal = null, message = "operation timed out") {
   let timer = null;
   let abortHandler = null;
   const racers = [promise];
@@ -87,11 +87,11 @@ function withTimeout(promise, ms, signal = null, message = 'operation timed out'
   if (signal) {
     racers.push(new Promise((resolve, reject) => {
       if (signal.aborted) {
-        reject(signal.reason || new Error('aborted'));
+        reject(signal.reason || new Error("aborted"));
         return;
       }
-      abortHandler = () => reject(signal.reason || new Error('aborted'));
-      signal.addEventListener('abort', abortHandler, { once: true });
+      abortHandler = () => reject(signal.reason || new Error("aborted"));
+      signal.addEventListener("abort", abortHandler, { once: true });
     }));
   }
 
@@ -99,12 +99,12 @@ function withTimeout(promise, ms, signal = null, message = 'operation timed out'
 
   return Promise.race(racers).finally(() => {
     if (timer) clearTimeout(timer);
-    if (signal && abortHandler) signal.removeEventListener('abort', abortHandler);
+    if (signal && abortHandler) signal.removeEventListener("abort", abortHandler);
   });
 }
 
-/** 将 socket 的 close/error 事件转换为 Promise。 */
-function waitForEvent(emitter, event, errorEvents = ['error', 'close']) {
+/** Convert socket close/error events to a Promise. */
+function waitForEvent(emitter, event, errorEvents = ["error", "close"]) {
   return new Promise((resolve, reject) => {
     const onEvent = (...args) => {
       cleanup();

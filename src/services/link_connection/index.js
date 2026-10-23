@@ -1,7 +1,7 @@
-'use strict';
+"use strict";
 
-const connection = require('./connection');
-const service = require('./service');
+const connection = require("./connection.js");
+const service = require("./service.js");
 
 module.exports = {
   ...connection,

@@ -1,7 +1,7 @@
-'use strict';
+"use strict";
 
 /**
- * 聊天连接协议定义（对应 Go 版本 service/chat_connection/define.go）。
+ * Chat connection protocol definitions (mirrors Go service/chat_connection/define.go).
  */
 
 const HANDSHAKE_REQUEST_CMD = 0x0101; // 257
@@ -9,14 +9,14 @@ const HEARTBEAT_INTERVAL_MS = 10 * 1000;
 
 const emptyFrame = Buffer.from([0x00, 0x00]);
 
-/** 生成长度前缀（小端 2 字节）。 */
+/** Build a length prefix (2 bytes, little-endian). */
 function frameLengthPrefix(length) {
   const buf = Buffer.alloc(2);
   buf.writeUInt16LE(length & 0xffff, 0);
   return buf;
 }
 
-/** 为载荷添加 2 字节小端长度前缀。 */
+/** Add a 2-byte little-endian length prefix to a payload. */
 function wrapFrame(payload) {
   const buf = Buffer.from(payload);
   if (buf.length > 0xffff) {
@@ -26,8 +26,8 @@ function wrapFrame(payload) {
 }
 
 /**
- * 基于 socket 数据流的分帧读取器。
- * 零长度帧会以空 Buffer 的形式返回。
+ * Frame reader based on the socket data stream.
+ * Zero-length frames are returned as empty Buffers.
  */
 class FrameReader {
   constructor(socket) {
@@ -45,10 +45,10 @@ class FrameReader {
       this._close();
     };
 
-    socket.on('data', this._onData);
-    socket.on('end', this._onClose);
-    socket.on('close', this._onClose);
-    socket.on('error', this._onError);
+    socket.on("data", this._onData);
+    socket.on("end", this._onClose);
+    socket.on("close", this._onClose);
+    socket.on("error", this._onError);
   }
 
   _pushData(chunk) {
@@ -90,7 +90,7 @@ class FrameReader {
     }
   }
 
-  /** 读取下一帧；连接正常关闭时返回 null。 */
+  /** Read the next frame; returns null when the connection closes normally. */
   readFrame() {
     if (this.frames.length > 0) {
       return Promise.resolve(this.frames.shift());
@@ -103,12 +103,12 @@ class FrameReader {
     });
   }
 
-  /** 主动销毁读取器（不关闭 socket）。 */
+  /** Actively destroy the reader (does not close the socket). */
   destroy() {
-    this.socket.removeListener('data', this._onData);
-    this.socket.removeListener('end', this._onClose);
-    this.socket.removeListener('close', this._onClose);
-    // 保留 error 监听器，避免 socket 销毁后出现未处理的 'error' 事件。
+    this.socket.removeListener("data", this._onData);
+    this.socket.removeListener("end", this._onClose);
+    this.socket.removeListener("close", this._onClose);
+    // Keep the error listener to avoid an unhandled 'error' event after the socket is destroyed.
     this._close();
   }
 }

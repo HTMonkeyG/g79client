@@ -9,7 +9,8 @@
   "type": "commonjs",
   "files": [
     "main.js",
-    "src"
+    "src",
+    "examples"
   ],
   "engines": {
     "node": ">=18.17.0"

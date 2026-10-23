@@ -1,12 +1,12 @@
-'use strict';
+"use strict";
 
-/** 全局配置刷新示例。 */
+/** Global configuration refresh example. */
 
-const g79client = require('../index');
+const g79client = require("../src/index.js");
 
 async function run() {
   await g79client.Refetch();
-  console.log('引擎版本:', g79client.EngineVersion);
+  console.log("引擎版本:", g79client.EngineVersion);
   const [packList, release, x19, chat, link, transfer] = await Promise.all([
     g79client.GetGlobalG79PackList(),
     g79client.GetGlobalG79ReleaseJSON(),

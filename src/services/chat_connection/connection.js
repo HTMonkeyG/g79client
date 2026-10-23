@@ -1,27 +1,27 @@
-'use strict';
+"use strict";
 
 /**
- * 聊天服务器连接（对应 Go 版本 service/chat_connection/connection.go）。
+ * Chat server connection (mirrors Go service/chat_connection/connection.go).
  */
 
-const { EventEmitter } = require('node:events');
+const { EventEmitter } = require("node:events");
 
-const { randomBytes } = require('../../utils/bytes');
-const { aesEcbEncryptBlock } = require('../../utils/aes');
-const { newNeteaseChaCha } = require('../../utils/chacha8');
-const { AsyncQueue } = require('../../utils/async');
-const { decodeToken } = require('./token');
+const { randomBytes } = require("../../utils/bytes.js");
+const { aesEcbEncryptBlock } = require("../../utils/aes.js");
+const { newNeteaseChaCha } = require("../../utils/chacha8.js");
+const { AsyncQueue } = require("../../utils/async.js");
+const { decodeToken } = require("./token.js");
 const {
   HANDSHAKE_REQUEST_CMD,
   HEARTBEAT_INTERVAL_MS,
   emptyFrame,
   wrapFrame,
   FrameReader,
-} = require('./define');
+} = require("./define.js");
 const {
   CommandChatPrivate,
   CommandChatGroup,
-} = require('./chat_const');
+} = require("./chat_const.js");
 
 class ChatConnection {
   constructor(service, socket, entry) {
@@ -43,7 +43,7 @@ class ChatConnection {
     this._heartbeatTimer = null;
   }
 
-  /** 执行握手；成功后创建加解密引擎。 */
+  /** Perform the handshake and create the encryption/decryption engines on success. */
   async handshake() {
     const tokenBytes = decodeToken(this.service.client.userToken);
     const uid = this.service.client.getUserIdInt();
@@ -69,7 +69,7 @@ class ChatConnection {
     for (;;) {
       const frame = await this.reader.readFrame();
       if (frame === null) {
-        throw new Error('chat_connection.handshake: 连接已关闭');
+        throw new Error("chat_connection.handshake: 连接已关闭");
       }
       if (frame.length === 0) continue;
       if (frame.length < 5) {
@@ -91,7 +91,7 @@ class ChatConnection {
     return this;
   }
 
-  /** 启动读循环与心跳循环。 */
+  /** Start the read loop and heartbeat loop. */
   startLoops() {
     this._startReadLoop();
     this._startHeartbeat();
@@ -103,9 +103,9 @@ class ChatConnection {
         for (;;) {
           const frame = await this.reader.readFrame();
           if (frame === null) {
-            // 服务端正常关闭时也进入关闭态，立即停止心跳并记录错误。
+            // Also enter the closed state on a normal server close, stopping the heartbeat immediately and recording an error.
             if (!this.closed) {
-              this._setError(new Error('chat_connection: EOF'));
+              this._setError(new Error("chat_connection: EOF"));
             }
             break;
           }
@@ -122,14 +122,14 @@ class ChatConnection {
           const message = { sequence: seq, command, payload };
 
           this.messagesQueue.push(message);
-          this._safeEmit('message', message);
+          this._safeEmit("message", message);
         }
       } catch (err) {
         this._setError(err);
       } finally {
         this.online = false;
         this.messagesQueue.close();
-        this._safeEmit('close');
+        this._safeEmit("close");
       }
     })();
   }
@@ -140,20 +140,20 @@ class ChatConnection {
         this._setError(new Error(`chat_connection: 心跳发送失败: ${err.message}`));
       });
     }, HEARTBEAT_INTERVAL_MS);
-    if (typeof this._heartbeatTimer.unref === 'function') {
+    if (typeof this._heartbeatTimer.unref === "function") {
       this._heartbeatTimer.unref();
     }
   }
 
-  /** 发送私聊消息。 */
+  /** Send a private chat message. */
   async chatTo(uid, words) {
-    const payload = Buffer.from(JSON.stringify([uid, words]), 'utf8');
+    const payload = Buffer.from(JSON.stringify([uid, words]), "utf8");
     return this.sendCommand(CommandChatPrivate, payload);
   }
 
-  /** 发送群聊消息。 */
+  /** Send a group chat message. */
   async groupChatTo(groupID, words) {
-    const payload = Buffer.from(JSON.stringify([groupID, words]), 'utf8');
+    const payload = Buffer.from(JSON.stringify([groupID, words]), "utf8");
     return this.sendCommand(CommandChatGroup, payload);
   }
 
@@ -164,10 +164,10 @@ class ChatConnection {
     return seq;
   }
 
-  /** 发送一条聊天命令，返回使用的序列号。 */
+  /** Send a chat command and return the sequence number used. */
   async sendCommand(command, payload) {
     if (!this.encrypt) {
-      throw new Error('chat_connection.sendMessage: 连接未就绪');
+      throw new Error("chat_connection.sendMessage: 连接未就绪");
     }
     const body = Buffer.alloc(2 + payload.length);
     body.writeUInt16LE(command & 0xffff, 0);
@@ -183,7 +183,7 @@ class ChatConnection {
     return seq;
   }
 
-  /** sendMessage 的别名，兼容 Go 命名。 */
+  /** Alias for sendMessage, for Go naming compatibility. */
   sendMessage(command, payload) {
     return this.sendCommand(command, payload);
   }
@@ -198,7 +198,7 @@ class ChatConnection {
   _write(data) {
     return new Promise((resolve, reject) => {
       if (this.closed) {
-        reject(new Error('chat_connection: 连接已关闭'));
+        reject(new Error("chat_connection: 连接已关闭"));
         return;
       }
       this.socket.write(data, (err) => {
@@ -208,40 +208,40 @@ class ChatConnection {
     });
   }
 
-  /** 当前是否已登录。 */
+  /** Whether the connection is currently logged in. */
   isOnline() {
     return this.online;
   }
 
-  /** 当前序列号。 */
+  /** Current sequence number. */
   serialNumber() {
     return this.seq;
   }
 
-  /** 返回消息异步队列，可用于 for await。 */
+  /** Return the message async queue, usable with for await. */
   messages() {
     return this.messagesQueue;
   }
 
-  /** 注册消息回调，返回取消函数。 */
+  /** Register a message callback and return an unsubscribe function. */
   onMessage(callback) {
-    this.events.on('message', callback);
-    return () => this.events.off('message', callback);
+    this.events.on("message", callback);
+    return () => this.events.off("message", callback);
   }
 
-  /** 最新错误。 */
+  /** Latest error. */
   error() {
     return this.lastError;
   }
 
-  /** 隔离用户回调异常，避免回调抛错导致连接断开。 */
+  /** Isolate user callback exceptions so a throwing callback cannot close the connection. */
   _safeEmit(eventName, payload) {
     try {
       this.events.emit(eventName, payload);
     } catch (err) {
-      if (this.events.listenerCount('callbackError') > 0) {
+      if (this.events.listenerCount("callbackError") > 0) {
         try {
-          this.events.emit('callbackError', err);
+          this.events.emit("callbackError", err);
         } catch (ignored) {
           // 忽略 callbackError 监听器自身的异常
         }
@@ -253,12 +253,12 @@ class ChatConnection {
     if (!this.lastError) this.lastError = err;
     this.online = false;
     this.close().catch(() => undefined);
-    if (this.events.listenerCount('error') > 0) {
-      this._safeEmit('error', err);
+    if (this.events.listenerCount("error") > 0) {
+      this._safeEmit("error", err);
     }
   }
 
-  /** 关闭连接。 */
+  /** Close the connection. */
   async close() {
     if (this.closed) return;
     this.closed = true;
@@ -276,7 +276,7 @@ class ChatConnection {
     this.messagesQueue.close();
   }
 
-  // Go 风格别名
+  // Go-style aliases
   ChatTo(uid, words) {
     return this.chatTo(uid, words);
   }

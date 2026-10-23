@@ -1,20 +1,20 @@
-'use strict';
+"use strict";
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const net = require('node:net');
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const net = require("node:net");
 
-const { FrameReader, wrapFrame, HANDSHAKE_REQUEST_CMD } = require('../services/chat_connection/define');
-const { ChatConnectionService } = require('../services/chat_connection/service');
-const { CommandChatPrivate } = require('../services/chat_connection/chat_const');
-const { newNeteaseChaCha } = require('../utils/chacha8');
-const { aesEcbEncryptBlock } = require('../utils/aes');
-const { hexDecode } = require('../utils/bytes');
-const { makeClient } = require('./helpers');
+const { FrameReader, wrapFrame, HANDSHAKE_REQUEST_CMD } = require("../services/chat_connection/define.js");
+const { ChatConnectionService } = require("../services/chat_connection/service.js");
+const { CommandChatPrivate } = require("../services/chat_connection/chat_const.js");
+const { newNeteaseChaCha } = require("../utils/chacha8.js");
+const { aesEcbEncryptBlock } = require("../utils/aes.js");
+const { hexDecode } = require("../utils/bytes.js");
+const { makeClient } = require("./helpers.js");
 
-const TOKEN = '00112233445566778899aabbccddeeff';
+const TOKEN = "00112233445566778899aabbccddeeff";
 
-test('聊天连接完成握手并收发加密消息', async (t) => {
+test("聊天连接完成握手并收发加密消息", async (t) => {
   const key = hexDecode(TOKEN);
   let serverError = null;
   let resolveServerDone;
@@ -34,7 +34,7 @@ test('聊天连接完成握手并收发加密消息', async (t) => {
       assert.equal(uid, 12345);
       assert.deepEqual(aesRand, aesEcbEncryptBlock(rand, key));
 
-      // 握手成功（客户端只检查 frame[4] === 0）
+      // Handshake succeeded (the client only checks frame[4] === 0)
       socket.write(wrapFrame(Buffer.from([0, 0, 0, 0, 0])));
 
       const decrypt = newNeteaseChaCha(Buffer.concat([key, rand]));
@@ -42,21 +42,21 @@ test('聊天连接完成握手并收发加密消息', async (t) => {
 
       const clientFrame = await reader.readFrame();
       assert.ok(clientFrame);
-      assert.equal(clientFrame.readUInt16LE(0), 2); // 客户端首个序列号
+      assert.equal(clientFrame.readUInt16LE(0), 2); // First client sequence number
       const plain = decrypt.process(clientFrame.subarray(2));
       assert.equal(plain.readUInt16LE(0), CommandChatPrivate);
-      assert.deepEqual(JSON.parse(plain.subarray(2).toString('utf8')), [999, '你好']);
+      assert.deepEqual(JSON.parse(plain.subarray(2).toString("utf8")), [999, "你好"]);
 
-      // 向客户端发送一条消息
+      // Send one message to the client
       const body = Buffer.alloc(2 + 6);
       body.writeUInt16LE(123, 0);
-      body.write('server', 2, 'utf8');
+      body.write("server", 2, "utf8");
       const encrypted = encrypt.process(body);
       const message = Buffer.concat([Buffer.from([0x01, 0x00]), encrypted]);
       socket.write(wrapFrame(message));
 
       resolveServerDone();
-      // 模拟服务端主动关闭连接
+      // Simulate the server actively closing the connection
       setTimeout(() => socket.destroy(), 20);
     })().catch((err) => {
       serverError = err;
@@ -65,43 +65,43 @@ test('聊天连接完成握手并收发加密消息', async (t) => {
     });
   });
 
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   t.after(() => new Promise((resolve) => server.close(resolve)));
 
-  const client = makeClient('http://127.0.0.1:1');
+  const client = makeClient("http://127.0.0.1:1");
   client.userToken = TOKEN;
   const svc = new ChatConnectionService(client);
   const endpoint = {
-    host: '127.0.0.1',
+    host: "127.0.0.1",
     port,
-    entry: { ip: '127.0.0.1', port, ispEnabled: 0, ctccHost: '', cmccHost: '', cuccHost: '' },
+    entry: { ip: "127.0.0.1", port, ispEnabled: 0, ctccHost: "", cmccHost: "", cuccHost: "" },
   };
 
   const conn = await svc.dialWithEndpoint(endpoint, { timeoutMs: 3000 });
   t.after(() => conn.Close());
 
   const received = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('等待消息超时')), 3000);
+    const timer = setTimeout(() => reject(new Error("等待消息超时")), 3000);
     timer.unref?.();
     conn.onMessage((msg) => {
       clearTimeout(timer);
       resolve(msg);
     });
   });
-  const closed = new Promise((resolve) => conn.events.once('close', resolve));
+  const closed = new Promise((resolve) => conn.events.once("close", resolve));
 
-  const sn = await conn.ChatTo(999, '你好');
+  const sn = await conn.ChatTo(999, "你好");
   assert.equal(sn, 2);
   const msg = await received;
   assert.equal(msg.sequence, 1);
   assert.equal(msg.command, 123);
-  assert.equal(msg.payload.toString('utf8'), 'server');
+  assert.equal(msg.payload.toString("utf8"), "server");
 
   await serverDone;
   if (serverError) throw serverError;
 
-  // 服务端关闭后，连接应进入关闭态并记录错误
+  // After the server closes, the connection should enter the closed state and record an error
   await closed;
   assert.equal(conn.IsOnline(), false);
   assert.ok(conn.Err() instanceof Error);
@@ -110,31 +110,31 @@ test('聊天连接完成握手并收发加密消息', async (t) => {
   await conn.Close();
 });
 
-test('聊天服务根据 ISP 选择域名并回退到 IP', () => {
-  const { resolveHostByISP } = require('../services/chat_connection/service');
+test("聊天服务根据 ISP 选择域名并回退到 IP", () => {
+  const { resolveHostByISP } = require("../services/chat_connection/service.js");
   const entry = {
-    ip: '1.1.1.1',
+    ip: "1.1.1.1",
     ispEnabled: 1,
-    ctccHost: 'ctcc.example',
-    cmccHost: 'cmcc.example',
-    cuccHost: 'cucc.example',
+    ctccHost: "ctcc.example",
+    cmccHost: "cmcc.example",
+    cuccHost: "cucc.example",
   };
-  assert.equal(resolveHostByISP(entry, 10000), 'ctcc.example');
-  assert.equal(resolveHostByISP(entry, 10010), 'cucc.example');
-  assert.equal(resolveHostByISP(entry, 10086), 'cmcc.example');
-  assert.equal(resolveHostByISP(entry, 0), '1.1.1.1');
+  assert.equal(resolveHostByISP(entry, 10000), "ctcc.example");
+  assert.equal(resolveHostByISP(entry, 10010), "cucc.example");
+  assert.equal(resolveHostByISP(entry, 10086), "cmcc.example");
+  assert.equal(resolveHostByISP(entry, 0), "1.1.1.1");
 
   const disabled = { ...entry, ispEnabled: 0 };
-  assert.equal(resolveHostByISP(disabled, 10000), '1.1.1.1');
+  assert.equal(resolveHostByISP(disabled, 10000), "1.1.1.1");
 
-  const noIp = { ...entry, ip: '' };
-  assert.equal(resolveHostByISP(noIp, 0), 'ctcc.example');
+  const noIp = { ...entry, ip: "" };
+  assert.equal(resolveHostByISP(noIp, 0), "ctcc.example");
 });
 
-test('聊天 token 推导支持十六进制/Base64/原始字节', () => {
-  const { decodeToken } = require('../services/chat_connection/token');
-  assert.equal(decodeToken(TOKEN).toString('hex'), TOKEN);
-  assert.equal(decodeToken(Buffer.alloc(32, 1).toString('base64')).length, 32);
-  assert.equal(decodeToken('abcdefghijklmnopqrstuvwxyz01234!').length, 32);
-  assert.throws(() => decodeToken('short'), /无法根据 token 推导有效密钥长度/);
+test("聊天 token 推导支持十六进制/Base64/原始字节", () => {
+  const { decodeToken } = require("../services/chat_connection/token.js");
+  assert.equal(decodeToken(TOKEN).toString("hex"), TOKEN);
+  assert.equal(decodeToken(Buffer.alloc(32, 1).toString("base64")).length, 32);
+  assert.equal(decodeToken("abcdefghijklmnopqrstuvwxyz01234!").length, 32);
+  assert.throws(() => decodeToken("short"), /无法根据 token 推导有效密钥长度/);
 });

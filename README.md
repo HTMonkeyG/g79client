@@ -20,6 +20,7 @@
 ```
 main.js                       入口（库导出 + 命令行）
 package.json
+examples/                     示例脚本
 legacy-go/                    原始 Go 实现（参考用，可忽略）
 src/
 ├── index.js                  汇总导出，挂载 Client 方法
@@ -47,7 +48,6 @@ src/
 │   └── link_connection/     Link TCP 协议（RSA + ChaCha8）
 ├── account/mpay/            MPay 设备注册、登录、游客账号
 ├── utils/                   字节、AES、ChaCha8、ZIP、异步队列等
-├── examples/                示例脚本
 └── tests/                   单元测试、协议测试与测试样本
 ```
 

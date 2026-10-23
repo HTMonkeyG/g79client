@@ -1,21 +1,21 @@
-'use strict';
+"use strict";
 
 /**
- * MPay 账号模块（对应 Go 版本 account/mpay）。
+ * MPay account module (mirrors Go account/mpay).
  */
 
-const clientModule = require('./client');
-const deviceModule = require('./device');
-const userModule = require('./user');
-const randomModule = require('./random');
-const { NeedVerifyError } = require('./error');
+const clientModule = require("./client.js");
+const deviceModule = require("./device.js");
+const userModule = require("./user.js");
+const randomModule = require("./random.js");
+const { NeedVerifyError } = require("./error.js");
 
-/** 创建 MPay 客户端。 */
+/** Create an MPay client. */
 function newClient(options = {}) {
   return new clientModule.MpayClient(options);
 }
 
-// 让客户端实例也可以直接生成设备，对应 Go 的 (*mpay.Client).GenerateDevice。
+// Allow a client instance to generate a device directly (mirrors Go (*mpay.Client).GenerateDevice).
 clientModule.MpayClient.prototype.generateDevice = function generateDeviceMethod(options = {}) {
   return deviceModule.generateDeviceWithClient(this, options);
 };

@@ -1,36 +1,36 @@
-'use strict';
+"use strict";
 
 /**
- * Link 服务器连接（对应 Go 版本 service/link_connection/connection.go）。
+ * Link server connection (mirrors Go service/link_connection/connection.go).
  *
- * 协议要点：
- * - 先 RSA 加密发送 16 字节 cipherR1，再发送客户端公钥 MD5
- * - 服务端返回 RSA 加密的 cipherR2，双方拼出 ChaCha8 密钥
- * - 帧格式：varint(长度) + ChaCha8 加密体
- * - 加密体内部：varint(serverID) + flag + methodLen + method + JSON payload
+ * Protocol outline:
+ * - Send a 16-byte cipherR1 encrypted with RSA, then the client public key MD5
+ * - The server returns an RSA-encrypted cipherR2; both sides derive the ChaCha8 keys
+ * - Frame format: varint(length) + ChaCha8-encrypted body
+ * - Body format: varint(serverID) + flag + methodLen + method + JSON payload
  */
 
-const crypto = require('node:crypto');
-const { EventEmitter } = require('node:events');
+const crypto = require("node:crypto");
+const { EventEmitter } = require("node:events");
 
 const {
   randomBytes,
   hexDecode,
   hexEncode,
   md5,
-} = require('../../utils/bytes');
-const { aesEcbEncryptBlock } = require('../../utils/aes');
-const { newNeteaseChaCha } = require('../../utils/chacha8');
-const { AsyncQueue } = require('../../utils/async');
-const { toInt } = require('../../types');
+} = require("../../utils/bytes.js");
+const { aesEcbEncryptBlock } = require("../../utils/aes.js");
+const { newNeteaseChaCha } = require("../../utils/chacha8.js");
+const { AsyncQueue } = require("../../utils/async.js");
+const { toInt } = require("../../types.js");
 
 const HEARTBEAT_INTERVAL_MS = 10 * 1000;
 const CHAT_SERVER_ID = 112;
 const FALLBACK_RSA_KEY_BYTES = 256;
 
-const SERVER_PUBLIC_KEY_BASE64 = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArht9ioo6tc3Z7On/80iYjNI+HpxnEpSc0tXC9JLykvwkxluZiLPrlvO6sgkkPsQMBXudGRu335dBCVdwfMefY7wswrQG51U+Nw3xfSSRgSptNV8PcmNjh6EYAluRSy7AZLcWc6+qJ6fJFOeABGYxNwMVvbpDC0R+t7BtcmQCk+4uXP2dsRjJSs6ALlfT7iEs8IL7iRfu1IvomTAc6eJarStgxEBTWdV/d2XfoIshbNYQ9ziBk0iWzHoI15UXFWLL+jZwhQYwzB0f+ilckgFT0IFKU4msUUQ7io4CBY2iI1G0BnSQYwpm84WR0HrgKL7uoxtJQ98iPk2GbZgWFv1OTwIDAQAB';
-const CLIENT_PRIVATE_KEY_BASE64 = 'MIIEpAIBAAKCAQEAx/Ipxphk+HO16oMY8HBOpauKgrdBnuQpH3LhJzsEkgYVK88ObW8w5ts3e0+UWCRJYoCwxPT2CPKeUvJr86gt3ajaOSXEej9iudOUcU6C5bARmkET5EXGvRLH7dnqJt0X2oGUG7H4Okit8+4UydcbjLs3VfXZba73+zqVUWhJPnpm5bnVzrsqu/mDo/EuClH9zp8oWz2RQfyCdVPtCwmY8wg/nrrUZNVV/AbgchuTedUHgs0IQ7eqUEZTVWrUFkkv82OvWUlu2RFxfFw4e9cTzEJJVPGxLmowFpFNKzp206jP3uL23VdnHrI8m4CGOqIlyfXgfCfIu/NxbLnzRnbQpQIDAQABAoIBAEvGXciy1olGKOpAVsJAfb3RfgO9+bOC2obdnbClcDz66ykYJmqY2hqTd7pW1Wx2DA21ochy4Y9Qi2n6D6le0ksQA+vmgUinHv43zikGzRrJGFKyWRyIySG8rWJZ1KB35+NaekvorZ9BDhPE5cH8sKcsCHOeYZFs3vQqJo6cjC2NwBSC+8HzeO+Btcgz88FX46tFvNokeGuJqZEEcfhss5dggEdHiUKTJsRXIdxwXqnYv08uPEzn/ogsnCBc5+ujwwds2qxiua599J8lY5KbB3/kBVqtea2MYUX/JUNEAIQRm7ygJ0DJJKRjPO0vYnkxXWC2waY5cRBpKQiTmJVwvf0CgYEA7xA8816Y42zRk5eU1ngmVX1GEoVkK6wf0obIgSMHlrwKl5u4rb3Vu8qGIPZ/OPw6zIr+sfAmsR2hFy6mAjQrLsGoGmegU1s6Ogr5fqMw55/OWv7tEhfI+myX2N9xw9IpodBsFfvd8yDDMmByiFtFx1oGu41VbbAJZdvsdlBIyV8CgYEA1hx5DspkRth44zIzgV+7EmCRSghCJ0c85MJwohpXX2wKg09gWm9AuuH74DEo0akIZGIRUZqxelMh3dc/mKmQmoMRbfMJojb7fytw3CtZEDNiXXDBtrZW2FFrwixK8XzFCKjYxwqOCt+kYbQcCz7MABWUb+heUxH+QMYtXTRr8HsCgYEAqup6GSktt5NKNvItmDQofABng8BYgJy716FDYogv2cWw8PmFTLonP+6ofJKfHJfAVhKdy4u9re1YCaHxUCwKH5CW5eHmjxHvDCZif/aedUsclpQh3EijCN9wpL4DsRPlben8DK+Y3EU1KSQpXnGa7s7fd2GxjQ1JesiEQ4Zcs5MCgYEAkdfpOgLw1TUk+xU58jkkMztmG/iOHzUuLGCp2jF5LH1ql9Ecv90iSWofaLHzrQSnu8D1LRHjLICuA+9X2YQ/BJCc8bjn6f/rxc7wXHiGfTuTGDTzLqL7evPTI/uJvP6RM/nXV5U/9fYqgYbux1YqHTCV4Lh2b71E5BhZ1DAeCjsCgYA5taKd1CCN1KyflOpiDJPskQSBdF9wO+P+dUdmFZDNccUFk2rNQ63idcH/n2L258Wf9SiI2dDjaaxUEetP3Ei75eHf4ixw22zlZ/kl+/BPWBdmTb+22xzoVMnt/ya/kvEC27/GAbrV4v+c5WFTs+ExWWkYbrpYJ6LnxAHiNf7/Uw==';
-const CLIENT_PUBLIC_KEY_MD5_HEX = '3f17d36cec77e47f1d301c0cc41cd73f';
+const SERVER_PUBLIC_KEY_BASE64 = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArht9ioo6tc3Z7On/80iYjNI+HpxnEpSc0tXC9JLykvwkxluZiLPrlvO6sgkkPsQMBXudGRu335dBCVdwfMefY7wswrQG51U+Nw3xfSSRgSptNV8PcmNjh6EYAluRSy7AZLcWc6+qJ6fJFOeABGYxNwMVvbpDC0R+t7BtcmQCk+4uXP2dsRjJSs6ALlfT7iEs8IL7iRfu1IvomTAc6eJarStgxEBTWdV/d2XfoIshbNYQ9ziBk0iWzHoI15UXFWLL+jZwhQYwzB0f+ilckgFT0IFKU4msUUQ7io4CBY2iI1G0BnSQYwpm84WR0HrgKL7uoxtJQ98iPk2GbZgWFv1OTwIDAQAB";
+const CLIENT_PRIVATE_KEY_BASE64 = "MIIEpAIBAAKCAQEAx/Ipxphk+HO16oMY8HBOpauKgrdBnuQpH3LhJzsEkgYVK88ObW8w5ts3e0+UWCRJYoCwxPT2CPKeUvJr86gt3ajaOSXEej9iudOUcU6C5bARmkET5EXGvRLH7dnqJt0X2oGUG7H4Okit8+4UydcbjLs3VfXZba73+zqVUWhJPnpm5bnVzrsqu/mDo/EuClH9zp8oWz2RQfyCdVPtCwmY8wg/nrrUZNVV/AbgchuTedUHgs0IQ7eqUEZTVWrUFkkv82OvWUlu2RFxfFw4e9cTzEJJVPGxLmowFpFNKzp206jP3uL23VdnHrI8m4CGOqIlyfXgfCfIu/NxbLnzRnbQpQIDAQABAoIBAEvGXciy1olGKOpAVsJAfb3RfgO9+bOC2obdnbClcDz66ykYJmqY2hqTd7pW1Wx2DA21ochy4Y9Qi2n6D6le0ksQA+vmgUinHv43zikGzRrJGFKyWRyIySG8rWJZ1KB35+NaekvorZ9BDhPE5cH8sKcsCHOeYZFs3vQqJo6cjC2NwBSC+8HzeO+Btcgz88FX46tFvNokeGuJqZEEcfhss5dggEdHiUKTJsRXIdxwXqnYv08uPEzn/ogsnCBc5+ujwwds2qxiua599J8lY5KbB3/kBVqtea2MYUX/JUNEAIQRm7ygJ0DJJKRjPO0vYnkxXWC2waY5cRBpKQiTmJVwvf0CgYEA7xA8816Y42zRk5eU1ngmVX1GEoVkK6wf0obIgSMHlrwKl5u4rb3Vu8qGIPZ/OPw6zIr+sfAmsR2hFy6mAjQrLsGoGmegU1s6Ogr5fqMw55/OWv7tEhfI+myX2N9xw9IpodBsFfvd8yDDMmByiFtFx1oGu41VbbAJZdvsdlBIyV8CgYEA1hx5DspkRth44zIzgV+7EmCRSghCJ0c85MJwohpXX2wKg09gWm9AuuH74DEo0akIZGIRUZqxelMh3dc/mKmQmoMRbfMJojb7fytw3CtZEDNiXXDBtrZW2FFrwixK8XzFCKjYxwqOCt+kYbQcCz7MABWUb+heUxH+QMYtXTRr8HsCgYEAqup6GSktt5NKNvItmDQofABng8BYgJy716FDYogv2cWw8PmFTLonP+6ofJKfHJfAVhKdy4u9re1YCaHxUCwKH5CW5eHmjxHvDCZif/aedUsclpQh3EijCN9wpL4DsRPlben8DK+Y3EU1KSQpXnGa7s7fd2GxjQ1JesiEQ4Zcs5MCgYEAkdfpOgLw1TUk+xU58jkkMztmG/iOHzUuLGCp2jF5LH1ql9Ecv90iSWofaLHzrQSnu8D1LRHjLICuA+9X2YQ/BJCc8bjn6f/rxc7wXHiGfTuTGDTzLqL7evPTI/uJvP6RM/nXV5U/9fYqgYbux1YqHTCV4Lh2b71E5BhZ1DAeCjsCgYA5taKd1CCN1KyflOpiDJPskQSBdF9wO+P+dUdmFZDNccUFk2rNQ63idcH/n2L258Wf9SiI2dDjaaxUEetP3Ei75eHf4ixw22zlZ/kl+/BPWBdmTb+22xzoVMnt/ya/kvEC27/GAbrV4v+c5WFTs+ExWWkYbrpYJ6LnxAHiNf7/Uw==";
+const CLIENT_PUBLIC_KEY_MD5_HEX = "3f17d36cec77e47f1d301c0cc41cd73f";
 
 let serverPublicKeyCache = null;
 let clientPrivateKeyCache = null;
@@ -38,9 +38,9 @@ let clientPrivateKeyCache = null;
 function serverPublicKey() {
   if (!serverPublicKeyCache) {
     serverPublicKeyCache = crypto.createPublicKey({
-      key: Buffer.from(SERVER_PUBLIC_KEY_BASE64, 'base64'),
-      format: 'der',
-      type: 'spki',
+      key: Buffer.from(SERVER_PUBLIC_KEY_BASE64, "base64"),
+      format: "der",
+      type: "spki",
     });
   }
   return serverPublicKeyCache;
@@ -49,9 +49,9 @@ function serverPublicKey() {
 function clientPrivateKey() {
   if (!clientPrivateKeyCache) {
     clientPrivateKeyCache = crypto.createPrivateKey({
-      key: Buffer.from(CLIENT_PRIVATE_KEY_BASE64, 'base64'),
-      format: 'der',
-      type: 'pkcs1',
+      key: Buffer.from(CLIENT_PRIVATE_KEY_BASE64, "base64"),
+      format: "der",
+      type: "pkcs1",
     });
   }
   return clientPrivateKeyCache;
@@ -166,14 +166,14 @@ class LinkConnection {
     this._onError = (err) => this._setError(err);
     this._onClose = () => {
       if (!this._intentionalClose && !this.lastError) {
-        this.lastError = new Error('link_connection: EOF');
+        this.lastError = new Error("link_connection: EOF");
       }
       this._closeInternal();
     };
 
-    socket.on('data', this._onData);
-    socket.on('error', this._onError);
-    socket.on('close', this._onClose);
+    socket.on("data", this._onData);
+    socket.on("error", this._onError);
+    socket.on("close", this._onClose);
 
     this._startHeartbeat();
 
@@ -269,30 +269,30 @@ class LinkConnection {
 
   _decodeMessage(body) {
     if (!this.decrypt) {
-      throw new Error('link_connection.decodeMessage: decrypt engine not ready');
+      throw new Error("link_connection.decodeMessage: decrypt engine not ready");
     }
     const plain = this.decrypt.process(body);
 
     const serverInfo = readVarInt(plain, 0);
     if (!serverInfo.ok) {
-      throw new Error('link_connection.decodeMessage: invalid server id');
+      throw new Error("link_connection.decodeMessage: invalid server id");
     }
     const off = serverInfo.size;
     if (plain.length < off + 2) {
-      throw new Error('link_connection.decodeMessage: payload too short');
+      throw new Error("link_connection.decodeMessage: payload too short");
     }
     const flag = plain[off];
     const methodLen = plain[off + 1];
     const start = off + 2;
     const endPos = start + methodLen;
     if (endPos > plain.length) {
-      throw new Error('link_connection.decodeMessage: invalid method length');
+      throw new Error("link_connection.decodeMessage: invalid method length");
     }
-    const method = plain.subarray(start, endPos).toString('utf8');
+    const method = plain.subarray(start, endPos).toString("utf8");
     const payload = Buffer.from(plain.subarray(endPos));
-    const payloadText = payload.toString('utf8');
+    const payloadText = payload.toString("utf8");
     let json = null;
-    if (payloadText !== '') {
+    if (payloadText !== "") {
       try {
         json = JSON.parse(payloadText);
       } catch (err) {
@@ -311,9 +311,9 @@ class LinkConnection {
   }
 
   _dispatchMessage(message) {
-    if (message.method === 'LoginV2') {
+    if (message.method === "LoginV2") {
       if (message.json === null) {
-        this._settleLogin(new Error('link_connection.login: parse response failed'));
+        this._settleLogin(new Error("link_connection.login: parse response failed"));
         return;
       }
       if (toInt(message.json.code) !== 0) {
@@ -325,8 +325,8 @@ class LinkConnection {
       return;
     }
 
-    if (message.method === 'CommonPush' || message.method === 'RollingMsg') {
-      if (message.json && typeof message.json === 'object') {
+    if (message.method === "CommonPush" || message.method === "RollingMsg") {
+      if (message.json && typeof message.json === "object") {
         const data = {
           ...message.json,
           method: message.method,
@@ -335,12 +335,12 @@ class LinkConnection {
           raw: message.payloadText,
         };
         this.commonPushQueue.push(data);
-        this._safeEmit('commonPush', data);
+        this._safeEmit("commonPush", data);
       }
     }
 
     this.messagesQueue.push(message);
-    this._safeEmit('message', message);
+    this._safeEmit("message", message);
   }
 
   _settleLogin(err) {
@@ -377,7 +377,7 @@ class LinkConnection {
       s2: hexEncode(randEnc),
       is_zip: false,
     };
-    await this._sendMessage(0, 'LoginV2', Buffer.from(JSON.stringify(payload), 'utf8'));
+    await this._sendMessage(0, "LoginV2", Buffer.from(JSON.stringify(payload), "utf8"));
   }
 
   _startHeartbeat() {
@@ -387,28 +387,28 @@ class LinkConnection {
         if (err) this._setError(new Error(`link_connection.heartbeat: ${err.message}`));
       });
     }, HEARTBEAT_INTERVAL_MS);
-    if (typeof this._heartbeatTimer.unref === 'function') {
+    if (typeof this._heartbeatTimer.unref === "function") {
       this._heartbeatTimer.unref();
     }
   }
 
-  /** 发送一条 Link 消息。 */
+  /** Send a Link message. */
   async sendMessage(serverID, method, payload = Buffer.alloc(0)) {
     if (!this.handshakeDone) {
-      throw new Error('link_connection.SendMessage: 连接尚未准备就绪');
+      throw new Error("link_connection.SendMessage: 连接尚未准备就绪");
     }
     return this._sendMessage(serverID, method, payload);
   }
 
   async _sendMessage(serverID, method, payload) {
     if (!this.encrypt) {
-      throw new Error('link_connection.sendMessage: encrypt engine 未准备');
+      throw new Error("link_connection.sendMessage: encrypt engine 未准备");
     }
     if (method.length > 255) {
-      throw new Error('link_connection.sendMessage: method 长度超出 255');
+      throw new Error("link_connection.sendMessage: method 长度超出 255");
     }
     const payloadBuf = payload ? Buffer.from(payload) : Buffer.alloc(0);
-    const methodBuf = Buffer.from(method, 'utf8');
+    const methodBuf = Buffer.from(method, "utf8");
 
     const body = Buffer.concat([
       writeVarInt(serverID),
@@ -426,7 +426,7 @@ class LinkConnection {
     if (!data || data.length === 0) return Promise.resolve();
     const task = this._sendChain.then(() => new Promise((resolve, reject) => {
       if (this.closed) {
-        reject(new Error('link_connection: 连接已关闭'));
+        reject(new Error("link_connection: 连接已关闭"));
         return;
       }
       this.socket.write(data, (err) => {
@@ -438,66 +438,66 @@ class LinkConnection {
     return task;
   }
 
-  /** 发送聊天相关请求。 */
+  /** Send a chat-related request. */
   sendChatRequest(serverID, method, data) {
     let payload = Buffer.alloc(0);
     if (data && Object.keys(data).length > 0) {
-      payload = Buffer.from(JSON.stringify(data), 'utf8');
+      payload = Buffer.from(JSON.stringify(data), "utf8");
     }
     return this.sendMessage(serverID, method, payload);
   }
 
-  /** 在世界频道发送文本消息。 */
+  /** Send a text message to the world channel. */
   async sendGlobalMessage(content) {
     if (!this.online) {
-      throw new Error('link_connection.SendGlobalMessage: 连接未登录');
+      throw new Error("link_connection.SendGlobalMessage: 连接未登录");
     }
     const msg = {
-      type: 'text',
+      type: "text",
       quick: false,
       data: content,
       message_visibility: 0,
     };
     const req = {
       msg: JSON.stringify(msg),
-      refer_message_id: '',
+      refer_message_id: "",
     };
-    return this.sendChatRequest(CHAT_SERVER_ID, 'SendMessage', req);
+    return this.sendChatRequest(CHAT_SERVER_ID, "SendMessage", req);
   }
 
-  /** 发送 GameStart。 */
+  /** Send GameStart. */
   async sendGameStart(data) {
     if (!this.online) {
-      throw new Error('link_connection.SendGameStart: 连接未登录');
+      throw new Error("link_connection.SendGameStart: 连接未登录");
     }
     const payload = data ?? { strict_mode: true };
-    return this.sendMessage(0, 'GameStart', Buffer.from(JSON.stringify(payload), 'utf8'));
+    return this.sendMessage(0, "GameStart", Buffer.from(JSON.stringify(payload), "utf8"));
   }
 
-  /** 发送 GameStop。 */
+  /** Send GameStop. */
   async sendGameStop(data) {
     if (!this.online) {
-      throw new Error('link_connection.SendGameStop: 连接未登录');
+      throw new Error("link_connection.SendGameStop: 连接未登录");
     }
     const payload = data ?? { strict_mode: true };
-    return this.sendMessage(0, 'GameStop', Buffer.from(JSON.stringify(payload), 'utf8'));
+    return this.sendMessage(0, "GameStop", Buffer.from(JSON.stringify(payload), "utf8"));
   }
 
   sendChatOnline() {
-    return this.sendChatRequest(CHAT_SERVER_ID, 'Online', null);
+    return this.sendChatRequest(CHAT_SERVER_ID, "Online", null);
   }
 
   requestChatDumpState() {
-    return this.sendChatRequest(0, 'DumpState', null);
+    return this.sendChatRequest(0, "DumpState", null);
   }
 
   requestChatConnectState() {
-    return this.sendChatRequest(0, 'ConnectState', { server_id: CHAT_SERVER_ID });
+    return this.sendChatRequest(0, "ConnectState", { server_id: CHAT_SERVER_ID });
   }
 
   fetchGlobalMessages(length) {
     const size = length > 0 ? length : 20;
-    return this.sendChatRequest(CHAT_SERVER_ID, 'GetGlobalMessages', {
+    return this.sendChatRequest(CHAT_SERVER_ID, "GetGlobalMessages", {
       data: { length: size },
       length: size,
     });
@@ -507,26 +507,26 @@ class LinkConnection {
     return this.online;
   }
 
-  /** 原始消息队列。 */
+  /** Raw message queue. */
   messages() {
     return this.messagesQueue;
   }
 
-  /** 公共频道推送队列。 */
+  /** Common channel push queue. */
   commonPushMessages() {
     return this.commonPushQueue;
   }
 
-  /** 注册消息回调。 */
+  /** Register a message callback. */
   onMessage(callback) {
-    this.events.on('message', callback);
-    return () => this.events.off('message', callback);
+    this.events.on("message", callback);
+    return () => this.events.off("message", callback);
   }
 
-  /** 注册公共频道推送回调。 */
+  /** Register a common channel push callback. */
   onCommonPush(callback) {
-    this.events.on('commonPush', callback);
-    return () => this.events.off('commonPush', callback);
+    this.events.on("commonPush", callback);
+    return () => this.events.off("commonPush", callback);
   }
 
   socketInstance() {
@@ -543,8 +543,8 @@ class LinkConnection {
     this.online = false;
     this._settleLogin(err);
     this._closeInternal();
-    if (this.events.listenerCount('error') > 0) {
-      this._safeEmit('error', err);
+    if (this.events.listenerCount("error") > 0) {
+      this._safeEmit("error", err);
     }
   }
 
@@ -552,14 +552,14 @@ class LinkConnection {
     if (this.closed) return;
     this.closed = true;
     this.online = false;
-    this._settleLogin(this.lastError || new Error('link_connection: connection closed'));
+    this._settleLogin(this.lastError || new Error("link_connection: connection closed"));
     if (this._heartbeatTimer) {
       clearInterval(this._heartbeatTimer);
       this._heartbeatTimer = null;
     }
-    this.socket.removeListener('data', this._onData);
-    this.socket.removeListener('close', this._onClose);
-    // 保留 error 监听器，避免 socket 销毁后出现未处理的 'error' 事件。
+    this.socket.removeListener("data", this._onData);
+    this.socket.removeListener("close", this._onClose);
+    // Keep the error listener to avoid an unhandled 'error' event after the socket is destroyed.
     try {
       this.socket.destroy();
     } catch (err) {
@@ -567,7 +567,7 @@ class LinkConnection {
     }
     this.messagesQueue.close();
     this.commonPushQueue.close();
-    this._safeEmit('close');
+    this._safeEmit("close");
   }
 
   async close() {
@@ -575,14 +575,14 @@ class LinkConnection {
     this._closeInternal();
   }
 
-  /** 隔离用户回调异常，避免回调抛错导致连接断开。 */
+  /** Isolate user callback exceptions so a throwing callback cannot close the connection. */
   _safeEmit(eventName, payload) {
     try {
       this.events.emit(eventName, payload);
     } catch (err) {
-      if (this.events.listenerCount('callbackError') > 0) {
+      if (this.events.listenerCount("callbackError") > 0) {
         try {
-          this.events.emit('callbackError', err);
+          this.events.emit("callbackError", err);
         } catch (ignored) {
           // 忽略 callbackError 监听器自身的异常
         }
@@ -590,7 +590,7 @@ class LinkConnection {
     }
   }
 
-  // Go 风格别名
+  // Go-style aliases
   SendMessage(serverID, method, payload) {
     return this.sendMessage(serverID, method, payload);
   }

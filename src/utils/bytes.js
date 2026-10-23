@@ -1,11 +1,11 @@
-'use strict';
+"use strict";
 
-const crypto = require('node:crypto');
+const crypto = require("node:crypto");
 
-// 与 Go 版本 randomString 使用的字符集保持一致（大小写字母 + 数字）。
-const ALPHANUMERIC = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+// Match the character set used by the Go randomString (letters + digits).
+const ALPHANUMERIC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-/** 生成指定长度的随机字节。 */
+/** Generate random bytes of the specified length. */
 function randomBytes(length) {
   if (!Number.isInteger(length) || length < 0) {
     throw new TypeError(`randomBytes: 非法的长度 ${length}`);
@@ -13,114 +13,114 @@ function randomBytes(length) {
   return crypto.randomBytes(length);
 }
 
-/** 生成随机字母数字字符串（使用密码学安全随机数）。 */
+/** Generate a random alphanumeric string (cryptographically secure). */
 function randomString(length, charset = ALPHANUMERIC) {
   if (!Number.isInteger(length) || length < 0) {
     throw new TypeError(`randomString: 非法的长度 ${length}`);
   }
   if (charset.length === 0) {
-    throw new Error('randomString: 字符集不能为空');
+    throw new Error("randomString: 字符集不能为空");
   }
   const out = Buffer.allocUnsafe(length);
   for (let i = 0; i < length; i += 1) {
     out[i] = charset.charCodeAt(crypto.randomInt(charset.length));
   }
-  return out.toString('latin1');
+  return out.toString("latin1");
 }
 
-/** 生成随机十六进制字符串（小写），长度参数为字节数。 */
+/** Generate a random lowercase hex string; the length argument is in bytes. */
 function randomHex(byteLength) {
-  return randomBytes(byteLength).toString('hex');
+  return randomBytes(byteLength).toString("hex");
 }
 
-/** 生成随机十六进制字符串（大写）。 */
+/** Generate a random uppercase hex string. */
 function randomHexUpper(byteLength) {
   return randomHex(byteLength).toUpperCase();
 }
 
-/** 严格解码十六进制字符串；与 Go 的 hex.DecodeString 行为一致。 */
+/** Strictly decode a hex string; matches Go hex.DecodeString behavior. */
 function hexDecode(value) {
-  const s = typeof value === 'string' ? value : String(value);
+  const s = typeof value === "string" ? value : String(value);
   if (s.length % 2 !== 0 || /[^0-9a-fA-F]/.test(s)) {
-    throw new Error('encoding/hex: invalid byte');
+    throw new Error("encoding/hex: invalid byte");
   }
-  return Buffer.from(s, 'hex');
+  return Buffer.from(s, "hex");
 }
 
-/** 编码为十六进制字符串（小写）。 */
+/** Encode as a lowercase hex string. */
 function hexEncode(value) {
-  return Buffer.from(value).toString('hex');
+  return Buffer.from(value).toString("hex");
 }
 
-/** 严格解码标准 Base64 字符串。 */
+/** Strictly decode a standard Base64 string. */
 function base64Decode(value) {
-  const s = typeof value === 'string' ? value : String(value);
+  const s = typeof value === "string" ? value : String(value);
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(s)) {
-    throw new Error('illegal base64 data');
+    throw new Error("illegal base64 data");
   }
-  return Buffer.from(s, 'base64');
+  return Buffer.from(s, "base64");
 }
 
-/** 解码无填充（Raw）的 Base64 字符串。 */
+/** Decode an unpadded (Raw) Base64 string. */
 function base64RawDecode(value) {
-  const s = typeof value === 'string' ? value : String(value);
-  if (s.includes('=') || s.length % 4 === 1 || /[^A-Za-z0-9+/]/.test(s)) {
-    throw new Error('illegal raw base64 data');
+  const s = typeof value === "string" ? value : String(value);
+  if (s.includes("=") || s.length % 4 === 1 || /[^A-Za-z0-9+/]/.test(s)) {
+    throw new Error("illegal raw base64 data");
   }
-  return Buffer.from(s, 'base64');
+  return Buffer.from(s, "base64");
 }
 
-/** 编码为标准 Base64。 */
+/** Encode as standard Base64. */
 function base64Encode(value) {
-  return Buffer.from(value).toString('base64');
+  return Buffer.from(value).toString("base64");
 }
 
-/** 计算 MD5 摘要。 */
+/** Compute an MD5 digest. */
 function md5(value) {
   const input = Buffer.isBuffer(value) || value instanceof Uint8Array
     ? Buffer.from(value)
-    : Buffer.from(String(value ?? ''), 'utf8');
-  return crypto.createHash('md5').update(input).digest();
+    : Buffer.from(String(value ?? ""), "utf8");
+  return crypto.createHash("md5").update(input).digest();
 }
 
-/** 计算 MD5 摘要并返回小写十六进制。 */
+/** Compute an MD5 digest and return lowercase hex. */
 function md5Hex(value) {
-  return md5(value).toString('hex');
+  return md5(value).toString("hex");
 }
 
-/** PKCS#7 填充。 */
+/** PKCS#7 padding. */
 function pkcs7Pad(data, blockSize = 16) {
   const buf = Buffer.from(data);
   const padLen = blockSize - (buf.length % blockSize);
   return Buffer.concat([buf, Buffer.alloc(padLen, padLen)]);
 }
 
-/** PKCS#7 去除填充。 */
+/** PKCS#7 unpadding. */
 function pkcs7Unpad(data, blockSize = 16) {
   const buf = Buffer.from(data);
   if (buf.length === 0 || buf.length % blockSize !== 0) {
-    throw new Error('invalid padding');
+    throw new Error("invalid padding");
   }
   const padLen = buf[buf.length - 1];
   if (padLen === 0 || padLen > blockSize || padLen > buf.length) {
-    throw new Error('invalid padding size');
+    throw new Error("invalid padding size");
   }
   for (let i = buf.length - padLen; i < buf.length; i += 1) {
     if (buf[i] !== padLen) {
-      throw new Error('invalid padding content');
+      throw new Error("invalid padding content");
     }
   }
   return buf.subarray(0, buf.length - padLen);
 }
 
-/** 将任意值转换为 Buffer。 */
+/** Convert an arbitrary value to a Buffer. */
 function toBuffer(value) {
   if (Buffer.isBuffer(value)) return value;
   if (value instanceof Uint8Array) return Buffer.from(value);
-  return Buffer.from(String(value), 'utf8');
+  return Buffer.from(String(value), "utf8");
 }
 
-/** 去除末尾的 0x00 字节。 */
+/** Remove trailing 0x00 bytes. */
 function trimTrailingZeros(buf) {
   let end = buf.length;
   while (end > 0 && buf[end - 1] === 0) end -= 1;

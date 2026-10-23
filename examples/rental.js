@@ -1,13 +1,13 @@
-'use strict';
+"use strict";
 
-/** 租赁服示例（对应 Go legacy-go/example/main.go 与 rental_available_list）。 */
+/** Rental server example (mirrors Go legacy-go/example/main.go and rental_available_list). */
 
-const g79client = require('../index');
-const { login } = require('./login');
+const g79client = require("../src/index.js");
+const { login } = require("./login.js");
 
 async function run(args = [], options = {}) {
   const serverName = args[0] || options.server;
-  const password = args[1] || options.password || '';
+  const password = args[1] || options.password || "";
   const client = await login(options);
 
   if (!serverName) {
@@ -22,11 +22,11 @@ async function run(args = [], options = {}) {
 
   const searchResp = await client.SearchRentalServerByName(serverName);
   if (g79client.toInt(searchResp.code) !== 0 || !(searchResp.entities || []).length) {
-    throw new Error('获取租赁服信息失败');
+    throw new Error("获取租赁服信息失败");
   }
 
   const serverID = searchResp.entities[0].entity_id;
-  console.log('租赁服 ID:', serverID);
+  console.log("租赁服 ID:", serverID);
 
   const enterResp = await client.EnterRentalServerWorld(serverID, password);
   if (g79client.toInt(enterResp.code) !== 0) {
@@ -37,9 +37,9 @@ async function run(args = [], options = {}) {
 
   if (options.clientKey) {
     const authv2 = client.GenerateRentalGameAuthV2(serverID, options.clientKey);
-    console.log('AuthV2:', authv2);
+    console.log("AuthV2:", authv2);
     const chain = await client.SendAuthV2Request(authv2);
-    console.log('认证链:', chain);
+    console.log("认证链:", chain);
   }
   return { client, serverID, entity };
 }

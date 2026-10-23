@@ -1,16 +1,16 @@
-'use strict';
+"use strict";
 
 /**
- * Link 服务器列表与连接管理（对应 Go 版本 service/link_connection/service.go）。
+ * Link server list and connection management (mirrors Go service/link_connection/service.go).
  */
 
-const net = require('node:net');
-const crypto = require('node:crypto');
+const net = require("node:net");
+const crypto = require("node:crypto");
 
-const globals = require('../../globals');
-const { toInt } = require('../../types');
-const { withTimeout, waitForEvent } = require('../../utils/async');
-const { LinkConnection } = require('./connection');
+const globals = require("../../globals.js");
+const { toInt } = require("../../types.js");
+const { withTimeout, waitForEvent } = require("../../utils/async.js");
+const { LinkConnection } = require("./connection.js");
 
 function cloneServers(servers) {
   return servers ? servers.map((entry) => ({ ...entry })) : [];
@@ -19,14 +19,14 @@ function cloneServers(servers) {
 class LinkConnectionService {
   constructor(client) {
     if (!client) {
-      throw new Error('link_connection.NewLinkConnectionService: client 不能为空');
+      throw new Error("link_connection.NewLinkConnectionService: client 不能为空");
     }
     this.client = client;
     this.serversCache = null;
     this.primeError = null;
   }
 
-  /** 创建服务并预取服务器列表（失败时仍返回实例）。 */
+  /** Create the service and prefetch the server list (still returns an instance on failure). */
   static async create(client) {
     const svc = new LinkConnectionService(client);
     try {
@@ -39,7 +39,7 @@ class LinkConnectionService {
 
   async primeServers() {
     const list = await globals.getGlobalG79LinkServers();
-    // 与 Go 一致：空列表不进入缓存，下次调用会重新拉取。
+    // Same as Go: an empty list is not cached, so the next call will fetch again.
     this.serversCache = list && list.length > 0 ? cloneServers(list) : null;
     return cloneServers(this.serversCache);
   }
@@ -59,31 +59,31 @@ class LinkConnectionService {
     return cloneServers(this.serversCache);
   }
 
-  /** 随机选择一个可用节点。 */
+  /** Randomly select an available node. */
   async selectEndpoint() {
     const servers = await this.servers();
     if (servers.length === 0) {
-      throw new Error('link_connection.SelectEndpoint: 当前没有可用的 link 服务器');
+      throw new Error("link_connection.SelectEndpoint: 当前没有可用的 link 服务器");
     }
     const entry = servers[crypto.randomInt(servers.length)];
     return { entry };
   }
 
-  /** 选择节点并建立连接（等待登录完成）。 */
+  /** Select a node and establish a connection (waits for login). */
   async dial(options = {}) {
     const endpoint = await this.selectEndpoint();
     return this.dialEndpoint(endpoint, options);
   }
 
-  /** 使用指定节点建立连接。 */
+  /** Establish a connection using the specified node. */
   async dialEndpoint(endpoint, options = {}) {
     if (!endpoint) {
-      throw new Error('link_connection.DialEndpoint: endpoint 不能为空');
+      throw new Error("link_connection.DialEndpoint: endpoint 不能为空");
     }
     const entry = endpoint.entry;
     const port = toInt(entry.port);
     if (port === 0) {
-      throw new Error('link_connection.DialEndpoint: 节点端口无效');
+      throw new Error("link_connection.DialEndpoint: 节点端口无效");
     }
     const timeoutMs = options.timeoutMs ?? 30000;
     const signal = options.signal ?? null;
@@ -91,10 +91,10 @@ class LinkConnectionService {
     const socket = net.connect({ host: entry.ip, port });
     try {
       await withTimeout(
-        waitForEvent(socket, 'connect', ['error', 'close']),
+        waitForEvent(socket, "connect", ["error", "close"]),
         timeoutMs,
         signal,
-        'link_connection: 连接超时',
+        "link_connection: 连接超时",
       );
     } catch (err) {
       socket.destroy();
@@ -105,7 +105,7 @@ class LinkConnectionService {
     try {
       const loginPromise = conn.waitForLogin();
       loginPromise.catch(() => undefined);
-      await withTimeout(loginPromise, timeoutMs, signal, 'link_connection: 登录超时');
+      await withTimeout(loginPromise, timeoutMs, signal, "link_connection: 登录超时");
     } catch (err) {
       await conn.close();
       throw err;
@@ -113,7 +113,7 @@ class LinkConnectionService {
     return conn;
   }
 
-  // Go 风格别名
+  // Go-style aliases
   Client() { return this.clientInstance(); }
   Servers() { return this.servers(); }
   RefreshServers() { return this.refreshServers(); }
@@ -122,7 +122,7 @@ class LinkConnectionService {
   DialEndpoint(endpoint, options = {}) { return this.dialEndpoint(endpoint, options); }
 }
 
-/** 工厂函数。 */
+/** Factory function. */
 async function newLinkConnectionService(client) {
   return LinkConnectionService.create(client);
 }

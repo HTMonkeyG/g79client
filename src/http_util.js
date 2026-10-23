@@ -1,41 +1,41 @@
-'use strict';
+"use strict";
 
 /**
- * HTTP 工具层。
+ * HTTP utility layer.
  *
- * 使用 Node 自带的 http/https 模块（零依赖），并负责：
- * - gzip / deflate / br 响应解压
- * - 重定向跟随
- * - 超时与 AbortSignal
- * - 可选的不校验证书模式（仅用于本地抓包/自签名环境，通过环境变量开启）
+ * Uses Node's built-in http/https modules (zero dependencies) and handles:
+ * - gzip / deflate / br response decompression
+ * - redirect following
+ * - timeouts and AbortSignal
+ * - optional certificate verification bypass (for local capture/self-signed environments, enabled by env var)
  */
 
-const http = require('node:http');
-const https = require('node:https');
-const zlib = require('node:zlib');
+const http = require("node:http");
+const https = require("node:https");
+const zlib = require("node:zlib");
 
 const DEFAULT_TIMEOUT_MS = 60000;
 const MAX_REDIRECTS = 10;
 
 function envFlag(name) {
   const value = process.env[name];
-  return value === '1' || value === 'true' || value === 'yes';
+  return value === "1" || value === "true" || value === "yes";
 }
 
-/** 是否关闭 TLS 证书校验（默认关闭）。 */
+/** Whether to disable TLS certificate verification (disabled by default). */
 function defaultInsecureTLS() {
-  return envFlag('G79_TLS_INSECURE');
+  return envFlag("G79_TLS_INSECURE");
 }
 
 function decompressBody(body, contentEncoding) {
-  const enc = String(contentEncoding || '').toLowerCase();
+  const enc = String(contentEncoding || "").toLowerCase();
   if (!enc || body.length === 0) return body;
   try {
-    if (enc.includes('gzip')) return zlib.gunzipSync(body);
-    if (enc.includes('deflate')) return zlib.inflateSync(body);
-    if (enc.includes('br')) return zlib.brotliDecompressSync(body);
+    if (enc.includes("gzip")) return zlib.gunzipSync(body);
+    if (enc.includes("deflate")) return zlib.inflateSync(body);
+    if (enc.includes("br")) return zlib.brotliDecompressSync(body);
   } catch (err) {
-    // 某些服务端会错误地声明编码，此时保留原始内容。
+    // Some servers declare an encoding incorrectly; in that case keep the original body.
     return body;
   }
   return body;
@@ -43,7 +43,7 @@ function decompressBody(body, contentEncoding) {
 
 function normalizeHeaderValue(value) {
   if (value === undefined || value === null) return undefined;
-  if (Array.isArray(value)) return value.join(', ');
+  if (Array.isArray(value)) return value.join(", ");
   return String(value);
 }
 
@@ -53,13 +53,13 @@ function hasHeader(headers, name) {
 }
 
 /**
- * 发起一次 HTTP 请求（不处理重定向）。
+ * Perform one HTTP request (without handling redirects).
  * @returns {Promise<{statusCode:number, headers:Object, body:Buffer}>}
  */
 function doRequest(urlObj, options) {
   return new Promise((resolve, reject) => {
     const {
-      method = 'GET',
+      method = "GET",
       headers = {},
       body = null,
       timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -68,18 +68,18 @@ function doRequest(urlObj, options) {
     } = options;
 
     if (signal && signal.aborted) {
-      reject(signal.reason || new Error('request aborted'));
+      reject(signal.reason || new Error("request aborted"));
       return;
     }
 
-    const isHttps = urlObj.protocol === 'https:';
+    const isHttps = urlObj.protocol === "https:";
     const mod = isHttps ? https : http;
 
     const bodyBuffer = body === null || body === undefined ? null : Buffer.from(body);
     const finalHeaders = { ...headers };
-    // Go 的 strings.Reader 会自动带上 Content-Length；这里显式设置，避免使用 chunked 编码。
-    if (bodyBuffer && !hasHeader(finalHeaders, 'content-length') && !hasHeader(finalHeaders, 'transfer-encoding')) {
-      finalHeaders['Content-Length'] = String(bodyBuffer.length);
+    // Go's strings.Reader automatically sets Content-Length; set it explicitly here to avoid chunked encoding.
+    if (bodyBuffer && !hasHeader(finalHeaders, "content-length") && !hasHeader(finalHeaders, "transfer-encoding")) {
+      finalHeaders["Content-Length"] = String(bodyBuffer.length);
     }
 
     const requestOptions = {
@@ -95,17 +95,17 @@ function doRequest(urlObj, options) {
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
-      if (signal) signal.removeEventListener('abort', onAbort);
+      if (signal) signal.removeEventListener("abort", onAbort);
       fn(value);
     };
 
     const req = mod.request(urlObj, requestOptions, (res) => {
       const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('error', (err) => finish(reject, err));
-      res.on('end', () => {
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("error", (err) => finish(reject, err));
+      res.on("end", () => {
         const raw = Buffer.concat(chunks);
-        const decoded = decompressBody(raw, res.headers['content-encoding']);
+        const decoded = decompressBody(raw, res.headers["content-encoding"]);
         finish(resolve, {
           statusCode: res.statusCode || 0,
           headers: res.headers,
@@ -115,14 +115,14 @@ function doRequest(urlObj, options) {
     });
 
     function onAbort() {
-      req.destroy(signal.reason || new Error('request aborted'));
+      req.destroy(signal.reason || new Error("request aborted"));
     }
-    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
 
-    req.on('timeout', () => {
+    req.on("timeout", () => {
       req.destroy(new Error(`request timeout after ${timeoutMs}ms`));
     });
-    req.on('error', (err) => finish(reject, err));
+    req.on("error", (err) => finish(reject, err));
 
     if (bodyBuffer) {
       req.write(bodyBuffer);
@@ -132,14 +132,14 @@ function doRequest(urlObj, options) {
 }
 
 /**
- * 发起 HTTP(S) 请求并跟随重定向。
+ * Perform an HTTP(S) request and follow redirects.
  * @param {string} url
  * @param {object} [options]
  * @returns {Promise<{statusCode:number, headers:Object, body:Buffer, url:string}>}
  */
 async function httpRequest(url, options = {}) {
   let current = new URL(url);
-  let method = options.method || 'GET';
+  let method = options.method || "GET";
   let body = options.body;
 
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
@@ -152,14 +152,14 @@ async function httpRequest(url, options = {}) {
       return { ...res, url: current.toString() };
     }
 
-    // 与 Go 的默认行为保持一致：301/302/303 在 POST 时改为 GET。
-    if (res.statusCode === 303 || ((res.statusCode === 301 || res.statusCode === 302) && method === 'POST')) {
-      method = 'GET';
+    // Match Go's default behavior: 301/302/303 change POST to GET.
+    if (res.statusCode === 303 || ((res.statusCode === 301 || res.statusCode === 302) && method === "POST")) {
+      method = "GET";
       body = undefined;
-      delete headers['content-type'];
-      delete headers['Content-Type'];
-      delete headers['content-length'];
-      delete headers['Content-Length'];
+      delete headers["content-type"];
+      delete headers["Content-Type"];
+      delete headers["content-length"];
+      delete headers["Content-Length"];
     }
     current = new URL(location, current);
   }
@@ -167,17 +167,17 @@ async function httpRequest(url, options = {}) {
   throw new Error(`too many redirects: ${url}`);
 }
 
-/** 读取响应体（当前实现已在 doRequest 中解压，这里保持接口兼容）。 */
+/** Read the response body (decompression already happens in doRequest; kept for interface compatibility). */
 function readResponseBody(response) {
   return Buffer.from(response.body);
 }
 
-/** 将响应体按 UTF-8 解码。 */
+/** Decode the response body as UTF-8. */
 function responseText(response) {
-  return Buffer.from(response.body).toString('utf8');
+  return Buffer.from(response.body).toString("utf8");
 }
 
-/** 带默认配置的 HTTP 客户端。 */
+/** HTTP client with default configuration. */
 class HttpClient {
   constructor(options = {}) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -194,14 +194,14 @@ class HttpClient {
 
   async post(url, body, options = {}) {
     return this.request(url, {
-      method: 'POST',
+      method: "POST",
       body,
       ...options,
     });
   }
 
   async get(url, options = {}) {
-    return this.request(url, { method: 'GET', ...options });
+    return this.request(url, { method: "GET", ...options });
   }
 }
 

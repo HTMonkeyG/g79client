@@ -1,22 +1,22 @@
-'use strict';
+"use strict";
 
 /**
- * 聊天服务器列表与连接管理（对应 Go 版本 service/chat_connection/service.go）。
+ * Chat server list and connection management (mirrors Go service/chat_connection/service.go).
  */
 
-const net = require('node:net');
-const crypto = require('node:crypto');
+const net = require("node:net");
+const crypto = require("node:crypto");
 
-const globals = require('../../globals');
-const { toBool } = require('../../types');
-const { withTimeout, waitForEvent } = require('../../utils/async');
-const { ChatConnection } = require('./connection');
+const globals = require("../../globals.js");
+const { toBool } = require("../../types.js");
+const { withTimeout, waitForEvent } = require("../../utils/async.js");
+const { ChatConnection } = require("./connection.js");
 
 const ISP_HOST_KEYS = {
-  10000: 'ctccHost',
-  10010: 'cuccHost',
-  10086: 'cmccHost',
-  0: 'ip',
+  10000: "ctccHost",
+  10010: "cuccHost",
+  10086: "cmccHost",
+  0: "ip",
 };
 
 function cloneServers(servers) {
@@ -26,7 +26,7 @@ function cloneServers(servers) {
 class ChatConnectionService {
   constructor(client) {
     if (!client) {
-      throw new Error('chat_connection.NewChatConnectionService: client 不能为空');
+      throw new Error("chat_connection.NewChatConnectionService: client 不能为空");
     }
     this.client = client;
     this.serversCache = null;
@@ -34,8 +34,8 @@ class ChatConnectionService {
   }
 
   /**
-   * 创建服务并预取服务器列表。
-   * 与 Go 版本一致：预取失败时仍返回服务实例，错误记录在 primeError。
+   * Create the service and prefetch the server list.
+   * Like the Go version, a prefetch failure still returns the service instance; the error is stored in primeError.
    */
   static async create(client) {
     const svc = new ChatConnectionService(client);
@@ -49,39 +49,39 @@ class ChatConnectionService {
 
   async primeServers() {
     const list = await globals.getGlobalG79ChatServers();
-    // 与 Go 一致：空列表不进入缓存，下次调用会重新拉取。
+    // Same as Go: an empty list is not cached, so the next call will fetch again.
     this.serversCache = list && list.length > 0 ? cloneServers(list) : null;
     return cloneServers(this.serversCache);
   }
 
-  /** 底层 G79 客户端。 */
+  /** Underlying G79 client. */
   clientInstance() {
     return this.client;
   }
 
-  /** 当前服务器列表；缓存为空时自动刷新。 */
+  /** Current server list; automatically refreshed when the cache is empty. */
   async servers() {
     if (this.serversCache !== null) return cloneServers(this.serversCache);
     return this.refreshServers();
   }
 
-  /** 强制刷新服务器列表。 */
+  /** Force-refresh the server list. */
   async refreshServers() {
     const list = await globals.refreshG79ChatServers();
     this.serversCache = list && list.length > 0 ? cloneServers(list) : null;
     return cloneServers(this.serversCache);
   }
 
-  /** 根据 ISP ID 随机选择一个聊天服务器。 */
+  /** Randomly select a chat server based on the ISP ID. */
   async selectServer(ispID = 0) {
     const servers = await this.servers();
     if (servers.length === 0) {
-      throw new Error('chat_connection.SelectServer: 当前没有可用的聊天服务器');
+      throw new Error("chat_connection.SelectServer: 当前没有可用的聊天服务器");
     }
     const entry = servers[crypto.randomInt(servers.length)];
     const host = resolveHostByISP(entry, ispID);
-    if (host === '') {
-      throw new Error('chat_connection.SelectServer: 找不到有效域名');
+    if (host === "") {
+      throw new Error("chat_connection.SelectServer: 找不到有效域名");
     }
     return {
       host,
@@ -90,31 +90,31 @@ class ChatConnectionService {
     };
   }
 
-  /** 选择服务器并建立连接。 */
+  /** Select a server and establish a connection. */
   async dial(options = {}) {
     const endpoint = await this.selectServer(options.ispId ?? 0);
     return this.dialWithEndpoint(endpoint, options);
   }
 
-  /** 使用指定端点建立聊天连接。 */
+  /** Establish a chat connection using the specified endpoint. */
   async dialWithEndpoint(endpoint, options = {}) {    if (!endpoint) {
-      throw new Error('chat_connection.DialWithEndpoint: endpoint 不能为空');
+      throw new Error("chat_connection.DialWithEndpoint: endpoint 不能为空");
     }
     const timeoutMs = options.timeoutMs ?? 10000;
     const signal = options.signal ?? null;
 
     if (!endpoint.port) {
-      throw new Error('chat_connection.DialWithEndpoint: 端口无效');
+      throw new Error("chat_connection.DialWithEndpoint: 端口无效");
     }
 
     const socket = net.connect({ host: endpoint.host, port: endpoint.port });
 
     try {
       await withTimeout(
-        waitForEvent(socket, 'connect', ['error', 'close']),
+        waitForEvent(socket, "connect", ["error", "close"]),
         timeoutMs,
         signal,
-        'chat_connection: 连接超时',
+        "chat_connection: 连接超时",
       );
     } catch (err) {
       socket.destroy();
@@ -123,14 +123,14 @@ class ChatConnectionService {
 
     const conn = new ChatConnection(this, socket, endpoint.entry);
     socket.setTimeout(timeoutMs, () => {
-      socket.destroy(new Error('chat_connection.handshake: 握手超时'));
+      socket.destroy(new Error("chat_connection.handshake: 握手超时"));
     });
 
     try {
       const handshakePromise = conn.handshake();
-      // 防止超时竞速后出现未处理的 rejection
+      // Prevent an unhandled rejection after a timeout race
       handshakePromise.catch(() => undefined);
-      await withTimeout(handshakePromise, timeoutMs, signal, 'chat_connection: 握手超时');
+      await withTimeout(handshakePromise, timeoutMs, signal, "chat_connection: 握手超时");
     } catch (err) {
       conn.close().catch(() => undefined);
       throw err;
@@ -142,7 +142,7 @@ class ChatConnectionService {
     return conn;
   }
 
-  // Go 风格别名
+  // Go-style aliases
   Client() { return this.clientInstance(); }
   Servers() { return this.servers(); }
   RefreshServers() { return this.refreshServers(); }
@@ -151,7 +151,7 @@ class ChatConnectionService {
   DialWithEndpoint(endpoint, options = {}) { return this.dialWithEndpoint(endpoint, options); }
 }
 
-/** 根据 ISP ID 解析服务器域名。 */
+/** Resolve the server hostname based on the ISP ID. */
 function resolveHostByISP(entry, ispID) {
   if (toBool(entry.ispEnabled)) {
     const key = ISP_HOST_KEYS[ispID];
@@ -163,10 +163,10 @@ function resolveHostByISP(entry, ispID) {
   if (entry.ctccHost) return entry.ctccHost;
   if (entry.cmccHost) return entry.cmccHost;
   if (entry.cuccHost) return entry.cuccHost;
-  return '';
+  return "";
 }
 
-/** 工厂函数（对应 Go 的 NewChatConnectionService）。 */
+/** Factory function (mirrors Go NewChatConnectionService). */
 async function newChatConnectionService(client) {
   return ChatConnectionService.create(client);
 }

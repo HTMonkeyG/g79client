@@ -1,7 +1,7 @@
-'use strict';
+"use strict";
 
-/** MPay 错误类型（对应 Go 版本 account/mpay/error.go）。 */
+/** MPay error types (mirrors Go account/mpay/error.go). */
 
-const { NeedVerifyError } = require('../../errors');
+const { NeedVerifyError } = require("../../errors.js");
 
 module.exports = { NeedVerifyError };

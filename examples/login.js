@@ -1,16 +1,16 @@
-'use strict';
+"use strict";
 
-/** 基础登录示例（对应 Go legacy-go/example/main.go 与 example/login）。 */
+/** Basic login example (mirrors Go legacy-go/example/main.go and legacy-go/example/login). */
 
-const g79client = require('../index');
-const { getCookie } = require('./common');
+const g79client = require("../src/index.js");
+const { getCookie } = require("./common.js");
 
 /**
- * 使用 Cookie 完成认证。
+ * Authenticate with a Cookie.
  * @param {object} [options]
  * @param {string} [options.cookie]
- * @param {boolean} [options.x19] 使用 X19 认证
- * @returns {Promise<import('../index').Client>}
+ * @param {boolean} [options.x19] use X19 authentication
+ * @returns {Promise<import("../src/index.js").Client>}
  */
 async function login(options = {}) {
   const cookie = getCookie(options);
@@ -23,13 +23,13 @@ async function login(options = {}) {
   return client;
 }
 
-/** CLI 入口：登录并输出用户信息。 */
+/** CLI entry: log in and print user information. */
 async function run(args = [], options = {}) {
   const client = await login(options);
   const detail = client.userDetail || {};
   console.log(`用户ID: ${client.userId}`);
-  console.log(`昵称: ${detail.name ?? ''}`);
-  console.log(`等级: ${detail.level ?? ''}`);
+  console.log(`昵称: ${detail.name ?? ""}`);
+  console.log(`等级: ${detail.level ?? ""}`);
   console.log(`种子: ${client.seed}`);
   return client;
 }

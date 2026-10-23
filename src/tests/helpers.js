@@ -1,21 +1,21 @@
-'use strict';
+"use strict";
 
-/** 测试辅助：本地 HTTP 服务器与客户端构造。 */
+/** Test helper: local HTTP server and client construction. */
 
-const http = require('node:http');
-const { Client } = require('../index');
+const http = require("node:http");
+const { Client } = require("../index.js");
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
   });
 }
 
 /**
- * 启动本地 HTTP 服务器。
+ * Start a local HTTP server.
  * @param {(req, res, body, meta) => any} handler
  */
 async function startServer(handler) {
@@ -28,7 +28,7 @@ async function startServer(handler) {
       url: req.url,
       headers: req.headers,
       body,
-      text: body.toString('utf8'),
+      text: body.toString("utf8"),
     };
     requests.push(record);
     try {
@@ -38,12 +38,12 @@ async function startServer(handler) {
       res.end(String(err && err.stack ? err.stack : err));
     }
   });
-  server.on('connection', (socket) => {
+  server.on("connection", (socket) => {
     sockets.add(socket);
-    socket.on('close', () => sockets.delete(socket));
+    socket.on("close", () => sockets.delete(socket));
   });
 
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const url = `http://127.0.0.1:${port}`;
 
@@ -59,16 +59,16 @@ async function startServer(handler) {
 }
 
 function writeJSON(res, value, status = 200, extraHeaders = {}) {
-  res.writeHead(status, { 'Content-Type': 'application/json', ...extraHeaders });
+  res.writeHead(status, { "Content-Type": "application/json", ...extraHeaders });
   res.end(JSON.stringify(value));
 }
 
-/** 构造一个跳过初始化的测试客户端。 */
+/** Construct a test client that skips initialization. */
 function makeClient(baseUrl, extra = {}) {
   const client = new Client({
-    userId: '12345',
-    userToken: 'token',
-    seed: 'seed',
+    userId: "12345",
+    userToken: "token",
+    seed: "seed",
     releaseJSON: {
       coreServerUrl: baseUrl,
       webServerUrl: baseUrl,
@@ -81,9 +81,9 @@ function makeClient(baseUrl, extra = {}) {
       dcWebUrl: baseUrl,
       apiGatewayGrayUrl: `${baseUrl}/x19`,
     },
-    engineVersion: '3.4.5.273121',
-    g79LatestVersion: '3.4.18.283127',
-    patchResourcesHash: 'patchhash',
+    engineVersion: "3.4.5.273121",
+    g79LatestVersion: "3.4.18.283127",
+    patchResourcesHash: "patchhash",
     ...extra,
   });
   return client;

@@ -1,15 +1,15 @@
-'use strict';
+"use strict";
 
 /**
- * 极简 ZIP 读取器：只读取归档中的第一个文件。
- * 对应 Go 版本 globals.go 中的 readFirstFileFromZipData。
+ * Minimal ZIP reader: reads only the first file in the archive.
+ * Mirrors readFirstFileFromZipData in Go globals.go.
  *
- * 支持：
- * - stored（0）与 deflate（8）压缩方式
- * - ZIP64（大文件 / 强制 ZIP64 的归档）
+ * Supports:
+ * - stored (0) and deflate (8) compression
+ * - ZIP64 (large files / archives forced to ZIP64)
  */
 
-const zlib = require('node:zlib');
+const zlib = require("node:zlib");
 
 const EOCD_SIGNATURE = 0x06054b50;
 const ZIP64_EOCD_SIGNATURE = 0x06064b50;
@@ -39,7 +39,7 @@ function readUInt64LE(buf, offset, label) {
   return Number(value);
 }
 
-/** 解析 EOCD（含 ZIP64 扩展）。 */
+/** Parse EOCD (including ZIP64 extensions). */
 function readEOCDInfo(buf, eocd) {
   let entries = buf.readUInt16LE(eocd + 10);
   let cdOffset = buf.readUInt32LE(eocd + 16);
@@ -47,39 +47,39 @@ function readEOCDInfo(buf, eocd) {
 
   if (eocd >= 20 && buf.readUInt32LE(eocd - 20) === ZIP64_LOCATOR_SIGNATURE) {
     const locator = eocd - 20;
-    const zip64Offset = readUInt64LE(buf, locator + 8, 'zip64 eocd offset');
+    const zip64Offset = readUInt64LE(buf, locator + 8, "zip64 eocd offset");
     if (zip64Offset + 56 > buf.length || buf.readUInt32LE(zip64Offset) !== ZIP64_EOCD_SIGNATURE) {
-      throw new Error('zip: invalid zip64 end of central directory');
+      throw new Error("zip: invalid zip64 end of central directory");
     }
-    entries = readUInt64LE(buf, zip64Offset + 32, 'entry count');
-    cdSize = readUInt64LE(buf, zip64Offset + 40, 'central directory size');
-    cdOffset = readUInt64LE(buf, zip64Offset + 48, 'central directory offset');
+    entries = readUInt64LE(buf, zip64Offset + 32, "entry count");
+    cdSize = readUInt64LE(buf, zip64Offset + 40, "central directory size");
+    cdOffset = readUInt64LE(buf, zip64Offset + 48, "central directory offset");
   }
 
   return { entries, cdOffset, cdSize };
 }
 
-/** 读取 ZIP 数据中的第一个文件，返回解压后的 Buffer。 */
+/** Read the first file in the ZIP data and return the decompressed Buffer. */
 function readFirstFileFromZipData(data) {
   const buf = Buffer.from(data);
   if (buf.length < 22) {
-    throw new Error('zip: file too short');
+    throw new Error("zip: file too short");
   }
 
   const eocd = findEOCD(buf);
   if (eocd < 0) {
-    throw new Error('zip: end of central directory not found');
+    throw new Error("zip: end of central directory not found");
   }
 
   const { entries, cdOffset, cdSize } = readEOCDInfo(buf, eocd);
   if (entries === 0) {
-    throw new Error('zip archive is empty');
+    throw new Error("zip archive is empty");
   }
   if (cdOffset + 46 > buf.length || (cdSize > 0 && cdOffset + cdSize > buf.length)) {
-    throw new Error('zip: corrupt central directory');
+    throw new Error("zip: corrupt central directory");
   }
   if (buf.readUInt32LE(cdOffset) !== CENTRAL_SIGNATURE) {
-    throw new Error('zip: invalid central directory signature');
+    throw new Error("zip: invalid central directory signature");
   }
 
   const method = buf.readUInt16LE(cdOffset + 10);
@@ -89,7 +89,7 @@ function readFirstFileFromZipData(data) {
   const extraLength = buf.readUInt16LE(cdOffset + 30);
   let localOffset = buf.readUInt32LE(cdOffset + 42);
 
-  // ZIP64 扩展字段：仅当 32 位字段为全 1 时才包含对应的 64 位值。
+  // ZIP64 extra field: 64-bit values are present only when the 32-bit field is all ones.
   const extraStart = cdOffset + 46 + nameLength;
   const extraEnd = Math.min(extraStart + extraLength, buf.length);
   let pos = extraStart;
@@ -103,15 +103,15 @@ function readFirstFileFromZipData(data) {
     if (id === ZIP64_EXTRA_ID) {
       let offset = dataStart;
       if (uncompressedSize === 0xffffffff) {
-        uncompressedSize = readUInt64LE(buf, offset, 'uncompressed size');
+        uncompressedSize = readUInt64LE(buf, offset, "uncompressed size");
         offset += 8;
       }
       if (compressedSize === 0xffffffff) {
-        compressedSize = readUInt64LE(buf, offset, 'compressed size');
+        compressedSize = readUInt64LE(buf, offset, "compressed size");
         offset += 8;
       }
       if (localOffset === 0xffffffff) {
-        localOffset = readUInt64LE(buf, offset, 'local header offset');
+        localOffset = readUInt64LE(buf, offset, "local header offset");
         offset += 8;
       }
     }
@@ -119,10 +119,10 @@ function readFirstFileFromZipData(data) {
   }
 
   if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || localOffset === 0xffffffff) {
-    throw new Error('zip: missing zip64 extended information');
+    throw new Error("zip: missing zip64 extended information");
   }
   if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== LOCAL_SIGNATURE) {
-    throw new Error('zip: invalid local file header');
+    throw new Error("zip: invalid local file header");
   }
 
   const localNameLength = buf.readUInt16LE(localOffset + 26);
@@ -130,7 +130,7 @@ function readFirstFileFromZipData(data) {
   const dataStart = localOffset + 30 + localNameLength + localExtraLength;
   const dataEnd = dataStart + compressedSize;
   if (dataEnd > buf.length) {
-    throw new Error('zip: truncated file data');
+    throw new Error("zip: truncated file data");
   }
 
   const compressed = buf.subarray(dataStart, dataEnd);
@@ -140,7 +140,7 @@ function readFirstFileFromZipData(data) {
   if (method === 8) {
     const out = zlib.inflateRawSync(compressed);
     if (uncompressedSize !== 0 && out.length !== uncompressedSize) {
-      // 不视为致命错误：部分生成器会写错 uncompressedSize。
+      // Not treated as fatal: some generators write an incorrect uncompressedSize.
       return out;
     }
     return out;

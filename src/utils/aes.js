@@ -1,9 +1,9 @@
-'use strict';
+"use strict";
 
-const crypto = require('node:crypto');
-const { pkcs7Pad, pkcs7Unpad } = require('./bytes');
+const crypto = require("node:crypto");
+const { pkcs7Pad, pkcs7Unpad } = require("./bytes.js");
 
-/** 校验 AES 密钥长度（16/24/32 字节）。 */
+/** Validate the AES key length (16/24/32 bytes). */
 function validateKey(key) {
   const buf = Buffer.from(key);
   if (buf.length !== 16 && buf.length !== 24 && buf.length !== 32) {
@@ -20,7 +20,7 @@ function validateIv(iv) {
   return buf;
 }
 
-/** AES-CBC 加密（无自动填充）。 */
+/** AES-CBC encryption (no automatic padding). */
 function aesCbcEncrypt(plaintext, key, iv) {
   const keyBuf = validateKey(key);
   const ivBuf = validateIv(iv);
@@ -31,7 +31,7 @@ function aesCbcEncrypt(plaintext, key, iv) {
   return Buffer.concat([cipher.update(data), cipher.final()]);
 }
 
-/** AES-CBC 解密（无自动填充）。 */
+/** AES-CBC decryption (no automatic padding). */
 function aesCbcDecrypt(ciphertext, key, iv) {
   const keyBuf = validateKey(key);
   const ivBuf = validateIv(iv);
@@ -42,12 +42,12 @@ function aesCbcDecrypt(ciphertext, key, iv) {
   return Buffer.concat([decipher.update(data), decipher.final()]);
 }
 
-/** AES-ECB 解密（无自动填充），用于需要逐块处理的场景。 */
+/** AES-ECB decryption (no automatic padding), for block-by-block scenarios. */
 function aesEcbDecryptBlock(ciphertext, key) {
   const keyBuf = validateKey(key);
   const data = Buffer.from(ciphertext);
   if (data.length % 16 !== 0) {
-    throw new Error('aes ecb decrypt: ciphertext length is not block aligned');
+    throw new Error("aes ecb decrypt: ciphertext length is not block aligned");
   }
   const decipher = crypto.createDecipheriv(`aes-${keyBuf.length * 8}-ecb`, keyBuf, null);
   decipher.setAutoPadding(false);
@@ -55,8 +55,8 @@ function aesEcbDecryptBlock(ciphertext, key) {
 }
 
 /**
- * AES-ECB 加密（PKCS#7 填充）。
- * 对应 Go utils.AesECBEncrypt / pyaes.AESModeOfOperationECB。
+ * AES-ECB encryption (PKCS#7 padding).
+ * Mirrors Go utils.AesECBEncrypt / pyaes.AESModeOfOperationECB.
  */
 function aesEcbEncrypt(plaintext, key) {
   const keyBuf = validateKey(key);
@@ -64,7 +64,7 @@ function aesEcbEncrypt(plaintext, key) {
   return aesEcbEncryptBlock(padded, keyBuf);
 }
 
-/** AES-ECB 加密（无填充）。 */
+/** AES-ECB encryption (no padding). */
 function aesEcbEncryptBlock(plaintext, key) {
   const keyBuf = validateKey(key);
   const data = Buffer.from(plaintext);
@@ -77,8 +77,8 @@ function aesEcbEncryptBlock(plaintext, key) {
 }
 
 /**
- * AES-ECB 解密并去除 PKCS#7 填充。
- * 注意：Go 版本只提供加密函数，这里补齐解密便于测试与使用。
+ * AES-ECB decryption with PKCS#7 unpadding.
+ * Note: the Go version only provides encryption; decryption is added here for tests and convenience.
  */
 function aesEcbDecrypt(ciphertext, key) {
   const plain = aesEcbDecryptBlock(ciphertext, key);
@@ -94,7 +94,7 @@ module.exports = {
   aesEcbDecryptBlock,
   validateKey,
   validateIv,
-  // Go 风格别名
+  // Go-style aliases
   AesCBCEncrypt: aesCbcEncrypt,
   AesCBCDecrypt: aesCbcDecrypt,
   AesECBEncrypt: aesEcbEncrypt,

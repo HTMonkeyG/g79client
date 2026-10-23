@@ -1,14 +1,14 @@
-'use strict';
+"use strict";
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const zlib = require('node:zlib');
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const zlib = require("node:zlib");
 
-const { readFirstFileFromZipData } = require('../utils/zip');
+const { readFirstFileFromZipData } = require("../utils/zip.js");
 
-/** 构造只包含一个文件的 ZIP（用于测试读取器）。 */
+/** Build a ZIP containing a single file (for reader tests). */
 function buildZip(name, content, method = 0) {
-  const nameBuf = Buffer.from(name, 'utf8');
+  const nameBuf = Buffer.from(name, "utf8");
   const data = Buffer.from(content);
   const compressed = method === 8 ? zlib.deflateRawSync(data) : data;
 
@@ -17,7 +17,7 @@ function buildZip(name, content, method = 0) {
   local.writeUInt16LE(20, 4);
   local.writeUInt16LE(0, 6);
   local.writeUInt16LE(method, 8);
-  local.writeUInt32LE(0, 14); // crc（读取器不校验）
+  local.writeUInt32LE(0, 14); // crc (not validated by the reader)
   local.writeUInt32LE(compressed.length, 18);
   local.writeUInt32LE(data.length, 22);
   local.writeUInt16LE(nameBuf.length, 26);
@@ -50,21 +50,21 @@ function buildZip(name, content, method = 0) {
   return Buffer.concat([localRecord, centralRecord, eocd]);
 }
 
-test('读取 stored 压缩的 ZIP 第一个文件', () => {
-  const content = Buffer.from('{"assets":{"vanilla.mcp":{"md5":"abc"}}}');
-  const zip = buildZip('manifest.json', content, 0);
+test("读取 stored 压缩的 ZIP 第一个文件", () => {
+  const content = Buffer.from("{\"assets\":{\"vanilla.mcp\":{\"md5\":\"abc\"}}}");
+  const zip = buildZip("manifest.json", content, 0);
   assert.deepEqual(readFirstFileFromZipData(zip), content);
 });
 
-test('读取 deflate 压缩的 ZIP 第一个文件', () => {
-  const content = Buffer.from('hello '.repeat(100));
-  const zip = buildZip('data.txt', content, 8);
+test("读取 deflate 压缩的 ZIP 第一个文件", () => {
+  const content = Buffer.from("hello ".repeat(100));
+  const zip = buildZip("data.txt", content, 8);
   assert.deepEqual(readFirstFileFromZipData(zip), content);
 });
 
-/** 构造一个强制使用 ZIP64 字段的 ZIP（只包含一个文件）。 */
+/** Build a ZIP that forces ZIP64 fields (single file). */
 function buildZip64(name, content) {
-  const nameBuf = Buffer.from(name, 'utf8');
+  const nameBuf = Buffer.from(name, "utf8");
   const data = Buffer.from(content);
   const compressed = zlib.deflateRawSync(data);
 
@@ -129,19 +129,19 @@ function buildZip64(name, content) {
   return Buffer.concat([localRecord, centralRecord, zip64Eocd, locator, eocd]);
 }
 
-test('读取 ZIP64 归档的第一个文件', () => {
-  const content = Buffer.from('zip64 content '.repeat(20));
-  const zip = buildZip64('zip64.txt', content);
+test("读取 ZIP64 归档的第一个文件", () => {
+  const content = Buffer.from("zip64 content ".repeat(20));
+  const zip = buildZip64("zip64.txt", content);
   assert.deepEqual(readFirstFileFromZipData(zip), content);
 });
 
-test('空 ZIP 抛出错误', () => {
+test("空 ZIP 抛出错误", () => {
   const eocd = Buffer.alloc(22);
   eocd.writeUInt32LE(0x06054b50, 0);
   assert.throws(() => readFirstFileFromZipData(eocd), /zip archive is empty/);
 });
 
-test('不支持的压缩方式抛出错误', () => {
-  const zip = buildZip('x', Buffer.from('x'), 99);
+test("不支持的压缩方式抛出错误", () => {
+  const zip = buildZip("x", Buffer.from("x"), 99);
   assert.throws(() => readFirstFileFromZipData(zip), /unsupported compression method/);
 });

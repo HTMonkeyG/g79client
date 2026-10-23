@@ -1,29 +1,29 @@
-'use strict';
+"use strict";
 
 /**
- * 全局配置缓存（对应 Go 版本 globals.go / client_core.go 的 init 逻辑）。
+ * Global configuration cache (mirrors the init logic in Go globals.go / client_core.go).
  *
- * 所有网络请求都通过 node:http(s) 完成；并发调用会复用同一个 in-flight Promise，
- * 避免重复下载。
+ * All network requests use node:http(s); concurrent calls share one in-flight Promise
+ * to avoid duplicate downloads.
  */
 
-const { httpRequest, defaultInsecureTLS } = require('./http_util');
-const { readFirstFileFromZipData } = require('./utils/zip');
-const { md5Hex } = require('./utils/bytes');
-const runtime = require('./runtime');
+const { httpRequest, defaultInsecureTLS } = require("./http_util.js");
+const { readFirstFileFromZipData } = require("./utils/zip.js");
+const { md5Hex } = require("./utils/bytes.js");
+const runtime = require("./runtime.js");
 const {
   g79BaseMCPHash,
-} = require('./engine_consts');
+} = require("./engine_consts.js");
 
-const G79_PACK_LIST_URL = 'https://g79.update.netease.com/pack_list/production/g79_packlist_2';
-const G79_PATCH_LIST_URL = 'https://g79.update.netease.com/patch_list/production/g79_rn_patchlist';
-const G79_RELEASE_JSON_URL = 'https://g79.update.netease.com/serverlist/adr_release.0.17.json';
-const X19_RELEASE_JSON_URL = 'https://x19.update.netease.com/serverlist/release.json';
+const G79_PACK_LIST_URL = "https://g79.update.netease.com/pack_list/production/g79_packlist_2";
+const G79_PATCH_LIST_URL = "https://g79.update.netease.com/patch_list/production/g79_rn_patchlist";
+const G79_RELEASE_JSON_URL = "https://g79.update.netease.com/serverlist/adr_release.0.17.json";
+const X19_RELEASE_JSON_URL = "https://x19.update.netease.com/serverlist/release.json";
 
 const SERVER_LIST_HEADERS = {
-  'User-Agent': 'libhttpclient/1.0.0.0',
-  'Accept-Encoding': 'gzip',
-  'content-type': 'text/plain',
+  "User-Agent": "libhttpclient/1.0.0.0",
+  "Accept-Encoding": "gzip",
+  "content-type": "text/plain",
 };
 
 const caches = {
@@ -46,7 +46,7 @@ const inflight = {
   packList: null,
 };
 
-// 缓存代际号：防止正在进行的旧请求覆盖刚刚 Refresh 得到的新数据。
+// Cache generation numbers: prevent an older in-flight request from overwriting data from a recent Refresh.
 const generation = {
   patchMeta: 0,
   g79ReleaseJSON: 0,
@@ -70,7 +70,7 @@ function cloneList(src) {
   return src ? src.map((v) => ({ ...v })) : null;
 }
 
-/** 通过共享的 in-flight Promise 获取并缓存一个值。 */
+/** Get and cache a value through a shared in-flight Promise. */
 async function cacheGet(key, fetcher) {
   if (caches[key] !== null) return caches[key];
   if (inflight[key] === null) {
@@ -97,7 +97,7 @@ async function cacheRefresh(key, fetcher) {
 }
 
 // ---------------------------------------------------------------------------
-// 通用请求工具
+// Common request utilities
 // ---------------------------------------------------------------------------
 
 async function fetchJSON(url, options = {}) {
@@ -105,7 +105,7 @@ async function fetchJSON(url, options = {}) {
     insecureTLS: defaultInsecureTLS(),
     ...options,
   });
-  const text = res.body.toString('utf8');
+  const text = res.body.toString("utf8");
   try {
     return JSON.parse(text);
   } catch (err) {
@@ -129,16 +129,16 @@ async function fetchFirstZipEntry(url) {
 }
 
 // ---------------------------------------------------------------------------
-// 数据规范化
+// Data normalization
 // ---------------------------------------------------------------------------
 
 function normalizeChatServer(raw) {
   return {
-    ip: raw.IP ?? '',
-    ispEnabled: raw.Isp_Enabled ?? '',
-    ctccHost: raw.ctcc_host ?? '',
-    cmccHost: raw.cmcc_host ?? '',
-    cuccHost: raw.cucc_host ?? '',
+    ip: raw.IP ?? "",
+    ispEnabled: raw.Isp_Enabled ?? "",
+    ctccHost: raw.ctcc_host ?? "",
+    cmccHost: raw.cmcc_host ?? "",
+    cuccHost: raw.cucc_host ?? "",
     port: raw.Port ?? 0,
     raw,
   };
@@ -146,27 +146,27 @@ function normalizeChatServer(raw) {
 
 function normalizeLinkServer(raw) {
   return {
-    status: raw.status ?? '',
-    ispEnabled: raw.Isp_Enabled ?? '',
-    ip: raw.ip ?? '',
-    serverType: raw.ServerType ?? '',
-    id: raw.id ?? '',
-    port: raw.port ?? '',
+    status: raw.status ?? "",
+    ispEnabled: raw.Isp_Enabled ?? "",
+    ip: raw.ip ?? "",
+    serverType: raw.ServerType ?? "",
+    id: raw.id ?? "",
+    port: raw.port ?? "",
     raw,
   };
 }
 
 function normalizeTransferServer(raw) {
   return {
-    status: raw.status ?? '',
-    ip: raw.ip ?? '',
-    ispEnabled: raw.Isp_Enabled ?? '',
-    batchNew: raw.batchNew ?? '',
-    batch: raw.batch ?? '',
-    id: raw.id ?? '',
-    signalWebPort: raw.SignalWebPort ?? '',
-    serverType: raw.ServerType ?? '',
-    webPort: raw.WebPort ?? '',
+    status: raw.status ?? "",
+    ip: raw.ip ?? "",
+    ispEnabled: raw.Isp_Enabled ?? "",
+    batchNew: raw.batchNew ?? "",
+    batch: raw.batch ?? "",
+    id: raw.id ?? "",
+    signalWebPort: raw.SignalWebPort ?? "",
+    serverType: raw.ServerType ?? "",
+    webPort: raw.WebPort ?? "",
     ports: Array.isArray(raw.ports) ? raw.ports.slice() : [],
     raw,
   };
@@ -174,63 +174,63 @@ function normalizeTransferServer(raw) {
 
 function normalizePackListEntry(raw) {
   return {
-    url: raw.url ?? '',
-    text: raw.text ?? '',
-    version: raw.version ?? '',
-    minVer: raw.min_ver ?? '',
+    url: raw.url ?? "",
+    text: raw.text ?? "",
+    version: raw.version ?? "",
+    minVer: raw.min_ver ?? "",
     raw,
   };
 }
 
 function normalizeG79ReleaseJSON(raw) {
   return {
-    coreServerUrl: raw.CoreServerUrl ?? '',
-    authServerUrl: raw.AuthServerUrl ?? '',
-    webServerUrl: raw.WebServerUrl ?? '',
-    apiGatewayUrl: raw.ApiGatewayUrl ?? '',
-    transferServerUrl: raw.TransferServerUrl ?? '',
-    transferServerNewHttpUrl: raw.TransferServerNewHttpUrl ?? '',
-    chatServerUrl: raw.ChatServerUrl ?? '',
-    linkServerUrl: raw.LinkServerUrl ?? '',
+    coreServerUrl: raw.CoreServerUrl ?? "",
+    authServerUrl: raw.AuthServerUrl ?? "",
+    webServerUrl: raw.WebServerUrl ?? "",
+    apiGatewayUrl: raw.ApiGatewayUrl ?? "",
+    transferServerUrl: raw.TransferServerUrl ?? "",
+    transferServerNewHttpUrl: raw.TransferServerNewHttpUrl ?? "",
+    chatServerUrl: raw.ChatServerUrl ?? "",
+    linkServerUrl: raw.LinkServerUrl ?? "",
     raw,
   };
 }
 
 function normalizeX19ReleaseJSON(raw) {
   return {
-    coreServerUrl: raw.CoreServerUrl ?? '',
-    webServerUrl: raw.WebServerUrl ?? '',
-    webServerGrayUrl: raw.WebServerGrayUrl ?? '',
-    transferServerUrl: raw.TransferServerUrl ?? '',
-    transferServerHttpUrl: raw.TransferServerHttpUrl ?? '',
-    peTransferServerUrl: raw.PeTransferServerUrl ?? '',
-    peTransferServerHttpUrl: raw.PeTransferServerHttpUrl ?? '',
-    peTransferServerNewHttpUrl: raw.PeTransferServerNewHttpUrl ?? '',
-    authServerUrl: raw.AuthServerUrl ?? '',
-    authServerCppUrl: raw.AuthServerCppUrl ?? '',
-    chatServerUrl: raw.ChatServerUrl ?? '',
-    apiGatewayUrl: raw.ApiGatewayUrl ?? '',
-    apiGatewayGrayUrl: raw.ApiGatewayGrayUrl ?? '',
-    dcWebUrl: raw.DCWebUrl ?? '',
-    rentalTransferUrl: raw.RentalTransferUrl ?? '',
+    coreServerUrl: raw.CoreServerUrl ?? "",
+    webServerUrl: raw.WebServerUrl ?? "",
+    webServerGrayUrl: raw.WebServerGrayUrl ?? "",
+    transferServerUrl: raw.TransferServerUrl ?? "",
+    transferServerHttpUrl: raw.TransferServerHttpUrl ?? "",
+    peTransferServerUrl: raw.PeTransferServerUrl ?? "",
+    peTransferServerHttpUrl: raw.PeTransferServerHttpUrl ?? "",
+    peTransferServerNewHttpUrl: raw.PeTransferServerNewHttpUrl ?? "",
+    authServerUrl: raw.AuthServerUrl ?? "",
+    authServerCppUrl: raw.AuthServerCppUrl ?? "",
+    chatServerUrl: raw.ChatServerUrl ?? "",
+    apiGatewayUrl: raw.ApiGatewayUrl ?? "",
+    apiGatewayGrayUrl: raw.ApiGatewayGrayUrl ?? "",
+    dcWebUrl: raw.DCWebUrl ?? "",
+    rentalTransferUrl: raw.RentalTransferUrl ?? "",
     raw,
   };
 }
 
 // ---------------------------------------------------------------------------
-// 补丁元数据
+// Patch metadata
 // ---------------------------------------------------------------------------
 
 async function fetchG79PatchMetadata() {
   const patchInfo = await fetchJSON(G79_PATCH_LIST_URL);
   const versions = Array.isArray(patchInfo.android) ? patchInfo.android : [];
   const version = selectAndroidPatchVersion(versions);
-  const resourcesHash = await fetchAndroidResourcesHash(version, patchInfo.urlNew || '');
+  const resourcesHash = await fetchAndroidResourcesHash(version, patchInfo.urlNew || "");
   return { version, resourcesHash };
 }
 
 function getEngineBasePrefix() {
-  const parts = String(runtime.getEngineVersion()).split('.');
+  const parts = String(runtime.getEngineVersion()).split(".");
   if (parts.length < 2) {
     throw new Error(`invalid engine version "${runtime.getEngineVersion()}"`);
   }
@@ -239,7 +239,7 @@ function getEngineBasePrefix() {
 
 function selectAndroidPatchVersion(versions) {
   if (!Array.isArray(versions) || versions.length === 0) {
-    throw new Error('no android patch versions available');
+    throw new Error("no android patch versions available");
   }
   const base = getEngineBasePrefix();
   for (let i = versions.length - 1; i >= 0; i -= 1) {
@@ -252,29 +252,29 @@ function selectAndroidPatchVersion(versions) {
 
 async function fetchAndroidResourcesHash(version, baseURL) {
   if (!baseURL) {
-    throw new Error('empty patch base url');
+    throw new Error("empty patch base url");
   }
-  const root = String(baseURL).replace(/\/+$/, '');
+  const root = String(baseURL).replace(/\/+$/, "");
   const pre = `${root}/android_${version}/${version}/android`;
 
   const manifest = await fetchFirstZipEntry(`${pre}/manifest.zip`);
   let manifestPayload;
   try {
-    manifestPayload = JSON.parse(manifest.toString('utf8'));
+    manifestPayload = JSON.parse(manifest.toString("utf8"));
   } catch (err) {
     throw new Error(`解析 manifest 失败: ${err.message}`);
   }
 
   let hashBase = g79BaseMCPHash;
   const assets = manifestPayload.assets || {};
-  if (assets['vanilla.mcp'] && assets['vanilla.mcp'].md5) {
-    hashBase = assets['vanilla.mcp'].md5;
+  if (assets["vanilla.mcp"] && assets["vanilla.mcp"].md5) {
+    hashBase = assets["vanilla.mcp"].md5;
   }
-  if (assets['vanilla_patch.mcp'] && assets['vanilla_patch.mcp'].md5) {
-    hashBase += assets['vanilla_patch.mcp'].md5;
+  if (assets["vanilla_patch.mcp"] && assets["vanilla_patch.mcp"].md5) {
+    hashBase += assets["vanilla_patch.mcp"].md5;
   }
 
-  let rnHash = '';
+  let rnHash = "";
   try {
     const raw = await downloadBytes(`${pre}/rn/index.bundle.backup`);
     let payload = raw;
@@ -292,12 +292,12 @@ async function fetchAndroidResourcesHash(version, baseURL) {
 }
 
 async function getGlobalG79PatchMetadata() {
-  const meta = await cacheGet('patchMeta', fetchG79PatchMetadata);
+  const meta = await cacheGet("patchMeta", fetchG79PatchMetadata);
   return { ...meta };
 }
 
 async function refreshG79PatchMetadata() {
-  const meta = await cacheRefresh('patchMeta', fetchG79PatchMetadata);
+  const meta = await cacheRefresh("patchMeta", fetchG79PatchMetadata);
   return { ...meta };
 }
 
@@ -322,29 +322,29 @@ async function fetchX19ReleaseJSON() {
 }
 
 async function getGlobalG79ReleaseJSON() {
-  return { ...(await cacheGet('g79ReleaseJSON', fetchG79ReleaseJSON)) };
+  return { ...(await cacheGet("g79ReleaseJSON", fetchG79ReleaseJSON)) };
 }
 
 async function refreshG79ReleaseJSON() {
-  return { ...(await cacheRefresh('g79ReleaseJSON', fetchG79ReleaseJSON)) };
+  return { ...(await cacheRefresh("g79ReleaseJSON", fetchG79ReleaseJSON)) };
 }
 
 async function getGlobalX19ReleaseJSON() {
-  return { ...(await cacheGet('x19ReleaseJSON', fetchX19ReleaseJSON)) };
+  return { ...(await cacheGet("x19ReleaseJSON", fetchX19ReleaseJSON)) };
 }
 
 async function refreshX19ReleaseJSON() {
-  return { ...(await cacheRefresh('x19ReleaseJSON', fetchX19ReleaseJSON)) };
+  return { ...(await cacheRefresh("x19ReleaseJSON", fetchX19ReleaseJSON)) };
 }
 
 // ---------------------------------------------------------------------------
-// 服务器列表
+// Server lists
 // ---------------------------------------------------------------------------
 
 async function fetchServerList(url, normalizer) {
   const list = await fetchJSON(url, { headers: { ...SERVER_LIST_HEADERS } });
   if (!Array.isArray(list)) {
-    throw new Error('服务器列表格式错误');
+    throw new Error("服务器列表格式错误");
   }
   return list.map(normalizer);
 }
@@ -365,27 +365,27 @@ async function fetchG79TransferServers() {
 }
 
 async function getGlobalG79ChatServers() {
-  return cloneList(await cacheGet('chatServers', fetchG79ChatServers));
+  return cloneList(await cacheGet("chatServers", fetchG79ChatServers));
 }
 
 async function refreshG79ChatServers() {
-  return cloneList(await cacheRefresh('chatServers', fetchG79ChatServers));
+  return cloneList(await cacheRefresh("chatServers", fetchG79ChatServers));
 }
 
 async function getGlobalG79LinkServers() {
-  return cloneList(await cacheGet('linkServers', fetchG79LinkServers));
+  return cloneList(await cacheGet("linkServers", fetchG79LinkServers));
 }
 
 async function refreshG79LinkServers() {
-  return cloneList(await cacheRefresh('linkServers', fetchG79LinkServers));
+  return cloneList(await cacheRefresh("linkServers", fetchG79LinkServers));
 }
 
 async function getGlobalG79TransferServers() {
-  return cloneList(await cacheGet('transferServers', fetchG79TransferServers));
+  return cloneList(await cacheGet("transferServers", fetchG79TransferServers));
 }
 
 async function refreshG79TransferServers() {
-  return cloneList(await cacheRefresh('transferServers', fetchG79TransferServers));
+  return cloneList(await cacheRefresh("transferServers", fetchG79TransferServers));
 }
 
 // ---------------------------------------------------------------------------
@@ -396,7 +396,7 @@ async function fetchG79PackList() {
   const raw = await fetchJSON(G79_PACK_LIST_URL, {
     headers: {
       ...SERVER_LIST_HEADERS,
-      'cache-control': 'no-cache',
+      "cache-control": "no-cache",
     },
   });
   const result = {};
@@ -407,14 +407,14 @@ async function fetchG79PackList() {
 }
 
 async function getGlobalG79PackList() {
-  return cloneMap(await cacheGet('packList', fetchG79PackList));
+  return cloneMap(await cacheGet("packList", fetchG79PackList));
 }
 
 async function refreshG79PackList() {
-  return cloneMap(await cacheRefresh('packList', fetchG79PackList));
+  return cloneMap(await cacheRefresh("packList", fetchG79PackList));
 }
 
-/** 清空所有缓存（主要给测试使用）。 */
+/** Clear all caches (mainly for tests). */
 function resetGlobals() {
   for (const key of Object.keys(caches)) {
     caches[key] = null;
@@ -458,7 +458,7 @@ module.exports = {
   normalizeG79ReleaseJSON,
   normalizeX19ReleaseJSON,
   selectAndroidPatchVersion,
-  // Go 风格别名
+  // Go-style aliases
   GetGlobalG79PatchMetadata: getGlobalG79PatchMetadata,
   RefreshG79PatchMetadata: refreshG79PatchMetadata,
   GetGlobalG79LatestVersion: getGlobalG79LatestVersion,

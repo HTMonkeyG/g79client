@@ -1,14 +1,14 @@
-'use strict';
+"use strict";
 
-/** 运行期可变状态（对应 Go 包级变量）。 */
+/** Runtime mutable state (mirrors Go package-level variables). */
 
-const DEFAULT_ENGINE_VERSION = '3.4.5.273121';
+const DEFAULT_ENGINE_VERSION = "3.4.5.273121";
 
 const state = {
   engineVersion: DEFAULT_ENGINE_VERSION,
-  osName: 'android',
-  gameVersion: '1.21.2',
-  x19DefaultVersion: '1.15.7.20505',
+  osName: "android",
+  gameVersion: "1.21.2",
+  x19DefaultVersion: "1.15.7.20505",
 };
 
 function getEngineVersion() {
@@ -16,7 +16,7 @@ function getEngineVersion() {
 }
 
 function setEngineVersion(version) {
-  if (typeof version === 'string' && version.trim() !== '') {
+  if (typeof version === "string" && version.trim() !== "") {
     state.engineVersion = version;
   }
   return state.engineVersion;

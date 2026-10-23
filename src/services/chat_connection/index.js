@@ -1,10 +1,10 @@
-'use strict';
+"use strict";
 
-const constants = require('./chat_const');
-const define = require('./define');
-const { decodeToken } = require('./token');
-const { ChatConnection } = require('./connection');
-const service = require('./service');
+const constants = require("./chat_const.js");
+const define = require("./define.js");
+const { decodeToken } = require("./token.js");
+const { ChatConnection } = require("./connection.js");
+const service = require("./service.js");
 
 module.exports = {
   ...constants,

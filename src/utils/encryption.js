@@ -1,8 +1,8 @@
-'use strict';
+"use strict";
 
 /**
- * 对应 Go 版本 utils/encryption.go 与 utils/aes.go 中的工具函数。
- * 这些函数主要用于 MPay 登录、PE 认证签名以及旧版 HTTP 加密。
+ * Utility functions from Go utils/encryption.go and utils/aes.go.
+ * These are mainly used by MPay login, PE auth signing, and legacy HTTP encryption.
  */
 
 const {
@@ -13,21 +13,21 @@ const {
   base64Encode,
   md5,
   md5Hex,
-} = require('./bytes');
-const { aesCbcEncrypt, aesCbcDecrypt } = require('./aes');
+} = require("./bytes.js");
+const { aesCbcEncrypt, aesCbcDecrypt } = require("./aes.js");
 
-/** 对登录令牌做 MD5，返回 16 字节摘要。 */
+/** MD5-hash the login token and return a 16-byte digest. */
 function getEncryptedToken(loginToken) {
   return md5(loginToken);
 }
 
 /**
- * G79 动态 HTTP Token（utils 版本）。
- * 该实现与根包 crypto.go 的 CalculateDynamicToken 等价，仅组织方式不同。
+ * G79 dynamic HTTP token (utils version).
+ * Equivalent to CalculateDynamicToken in the root crypto.go, just organized differently.
  */
 function g79GetDynamicHttpToken(loginToken, path, body) {
   const loginTokenHash = md5Hex(loginToken);
-  const string2 = md5Hex(loginTokenHash + body + '0eGsBkhl' + path);
+  const string2 = md5Hex(loginTokenHash + body + "0eGsBkhl" + path);
 
   const bin = Buffer.alloc(string2.length * 8);
   for (let i = 0; i < string2.length; i += 1) {
@@ -36,7 +36,7 @@ function g79GetDynamicHttpToken(loginToken, path, body) {
       bin[i * 8 + j] = (v >> (7 - j)) & 1;
     }
   }
-  // 左移 6 位
+  // Left shift by 6 bits
   const shifted = Buffer.concat([bin.subarray(6), bin.subarray(0, 6)]);
   const shiftedBytes = Buffer.alloc(shifted.length / 8);
   for (let i = 0; i < shiftedBytes.length; i += 1) {
@@ -47,7 +47,7 @@ function g79GetDynamicHttpToken(loginToken, path, body) {
     shiftedBytes[i] = v;
   }
 
-  const raw = Buffer.from(string2, 'latin1');
+  const raw = Buffer.from(string2, "latin1");
   const xored = Buffer.alloc(raw.length);
   for (let i = 0; i < raw.length; i += 1) {
     xored[i] = raw[i] ^ shiftedBytes[i];
@@ -56,31 +56,31 @@ function g79GetDynamicHttpToken(loginToken, path, body) {
 }
 
 function encryptToken(s) {
-  const replaced = String(s).replace(/\+/g, 'm').replace(/\//g, 'o');
+  const replaced = String(s).replace(/\+/g, "m").replace(/\//g, "o");
   const prefix = replaced.length >= 16 ? replaced.slice(0, 16) : replaced;
   return `${prefix}1`;
 }
 
 const G79_KEY_TABLE = [
-  '1C8D9CAD811F2F1E3F7B3B5D208DBE83',
-  '96271EAE017F444B342EB8C53AE106BA',
-  '6B5FF1292C60237E776923CF4C49ED9A',
-  'F020969C883F9C7ADC2C5A130FD1A9CC',
-  '607EB25E875E8C9B5C1C5D08648F2D8F',
-  'E67D0B4397CCB39C97A78F03315FBE03',
-  '3F8F5F7CC35950BF5C9E2B56B20A1F1B',
-  '7B8D1D7D674D7D8D917F7D0F2A4D9B48',
-  '78289B0C06234B2A2A7D9D7C3C1C1CD3',
-  '180928C6AF6C703FBD1A1C8C7EB06C8F',
-  '9D2B5D4D0C843E445C4E2A3E19CCCC3F',
-  'ED33B9EF6DCC3D2D45428AF516F80A4A',
-  '7B6CBC5C215E3E4B7E2F5F5A206823DD',
-  '7932137D6A2E1B7E204D6D891ED55D95',
-  '0E516BF59BEE9EB6712F5E5D63AC89D2',
-  'ED8BBB2D808A0D8F353F3F7B0E486BE5',
+  "1C8D9CAD811F2F1E3F7B3B5D208DBE83",
+  "96271EAE017F444B342EB8C53AE106BA",
+  "6B5FF1292C60237E776923CF4C49ED9A",
+  "F020969C883F9C7ADC2C5A130FD1A9CC",
+  "607EB25E875E8C9B5C1C5D08648F2D8F",
+  "E67D0B4397CCB39C97A78F03315FBE03",
+  "3F8F5F7CC35950BF5C9E2B56B20A1F1B",
+  "7B8D1D7D674D7D8D917F7D0F2A4D9B48",
+  "78289B0C06234B2A2A7D9D7C3C1C1CD3",
+  "180928C6AF6C703FBD1A1C8C7EB06C8F",
+  "9D2B5D4D0C843E445C4E2A3E19CCCC3F",
+  "ED33B9EF6DCC3D2D45428AF516F80A4A",
+  "7B6CBC5C215E3E4B7E2F5F5A206823DD",
+  "7932137D6A2E1B7E204D6D891ED55D95",
+  "0E516BF59BEE9EB6712F5E5D63AC89D2",
+  "ED8BBB2D808A0D8F353F3F7B0E486BE5",
 ];
 
-/** 根据索引选择密钥，十六进制解码后逐字节异或 0x7C。 */
+/** Select a key by index, hex-decode it, then XOR each byte with 0x7C. */
 function g79PickKey(index) {
   if (!Number.isInteger(index) || index < 0 || index >= G79_KEY_TABLE.length) {
     throw new Error(`G79PickKey: index ${index} out of range (0-${G79_KEY_TABLE.length - 1})`);
@@ -92,10 +92,10 @@ function g79PickKey(index) {
   return key;
 }
 
-/** utils 版本的 G79 HTTP 加密（返回十六进制字符串）。 */
+/** utils version of G79 HTTP encryption (returns a hex string). */
 function g79UtilsHttpEncrypt(data) {
-  const dataBytes = Buffer.from(String(data), 'utf8');
-  const tail = Buffer.from(randomString(16), 'latin1');
+  const dataBytes = Buffer.from(String(data), "utf8");
+  const tail = Buffer.from(randomString(16), "latin1");
   const padded = Buffer.concat([dataBytes, tail]);
   const paddedLen = padded.length + ((16 - (padded.length % 16)) % 16);
 
@@ -112,7 +112,7 @@ function g79UtilsHttpEncrypt(data) {
   return hexEncode(result);
 }
 
-/** utils 版本的 G79 HTTP 解密。 */
+/** utils version of G79 HTTP decryption. */
 function g79UtilsHttpDecrypt(data) {
   const bytes = hexDecode(data);
   if (bytes.length < 17) {
@@ -132,13 +132,13 @@ function g79UtilsHttpDecrypt(data) {
   let dropPos = decrypted.length - 1;
   while (dropPos >= 0 && decrypted[dropPos] === 0) dropPos -= 1;
   if (dropPos < 15) {
-    throw new Error('utils.G79HttpDecrypt: invalid decrypted data (no valid content)');
+    throw new Error("utils.G79HttpDecrypt: invalid decrypted data (no valid content)");
   }
   dropPos -= 16;
-  return decrypted.subarray(0, dropPos + 1).toString('utf8');
+  return decrypted.subarray(0, dropPos + 1).toString("utf8");
 }
 
-// PeAuthSign 使用的常量表。
+// Constant table used by PeAuthSign.
 const SIGN_B = Buffer.from([
   0x62, 0x25, 0x1e, 0xf6, 0x40, 0xb3, 0x40, 0xc0, 0x51, 0x5a, 0x5e, 0x26, 0xaa, 0xc7, 0xb6, 0xe9,
   0x44, 0xea, 0xbe, 0xa4, 0xa9, 0xcf, 0xde, 0x4b, 0x60, 0x4b, 0xbb, 0xf6, 0x70, 0xbc, 0xbf, 0xbe,
@@ -159,13 +159,13 @@ const xor32 = (a, b) => (a ^ b) >>> 0;
 const not32 = (a) => (~a) >>> 0;
 
 /**
- * 生成 PE 认证签名。
- * 对应 Go utils.PeAuthSign(v string, sp, tr int) (string, error)。
- * @returns {string} Base64 编码的 16 字节签名
+ * Generate the PE authentication signature.
+ * Mirrors Go utils.PeAuthSign(v string, sp, tr int) (string, error).
+ * @returns {string} Base64-encoded 16-byte signature
  */
 function peAuthSign(v, sp, tr) {
   if (!Number.isInteger(sp) || sp < 0 || !Number.isInteger(tr) || tr <= 0) {
-    throw new Error('PeAuthSign: invalid sp/tr parameters');
+    throw new Error("PeAuthSign: invalid sp/tr parameters");
   }
   if (16 * sp + 16 > SIGN_B.length) {
     throw new Error(`PeAuthSign: sp=${sp} out of range for constant table`);
@@ -176,9 +176,9 @@ function peAuthSign(v, sp, tr) {
 
   let s = String(v);
   const rem = s.length % 4;
-  if (rem !== 0) s += '0'.repeat(4 - rem);
+  if (rem !== 0) s += "0".repeat(4 - rem);
 
-  const a = Buffer.from(s, 'utf8');
+  const a = Buffer.from(s, "utf8");
   const p = [];
   for (let i = 0; i < a.length; i += 4) {
     p.push(((a[i] << 24) | (a[i + 1] << 16) | (a[i + 2] << 8) | a[i + 3]) >>> 0);
@@ -227,7 +227,7 @@ function peAuthSign(v, sp, tr) {
   out.writeUInt32LE(u >>> 0, 4);
   out.writeUInt32LE(x >>> 0, 8);
   out.writeUInt32LE(z >>> 0, 12);
-  return out.toString('base64');
+  return out.toString("base64");
 }
 
 module.exports = {
@@ -238,13 +238,13 @@ module.exports = {
   g79UtilsHttpEncrypt,
   g79UtilsHttpDecrypt,
   peAuthSign,
-  // Go 风格别名
+  // Go-style aliases
   GetEncryptedToken: getEncryptedToken,
   G79GetDynamicHttpToken: g79GetDynamicHttpToken,
   G79PickKey: g79PickKey,
   G79UtilsHttpEncrypt: g79UtilsHttpEncrypt,
   G79UtilsHttpDecrypt: g79UtilsHttpDecrypt,
-  // 与 Go utils 包的同名函数对应
+  // Corresponds to the same-named functions in Go's utils package
   G79HttpEncrypt: g79UtilsHttpEncrypt,
   G79HttpDecrypt: g79UtilsHttpDecrypt,
   PeAuthSign: peAuthSign,

@@ -1,15 +1,15 @@
-'use strict';
+"use strict";
 
 /**
- * 从用户 token 推导聊天握手使用的 AES 密钥。
- * 对应 Go 版本 service/chat_connection/token.go。
+ * Derive the AES key used for the chat handshake from the user token.
+ * Mirrors Go service/chat_connection/token.go.
  */
 
 const {
   hexDecode,
   base64Decode,
   base64RawDecode,
-} = require('../../utils/bytes');
+} = require("../../utils/bytes.js");
 
 function decodeToken(token) {
   const seen = new Set();
@@ -17,16 +17,16 @@ function decodeToken(token) {
 
   const appendCandidate = (buf) => {
     if (!buf) return;
-    const key = buf.toString('hex');
+    const key = buf.toString("hex");
     if (seen.has(key)) return;
     seen.add(key);
     candidates.push(Buffer.from(buf));
   };
 
-  try { appendCandidate(hexDecode(token)); } catch (err) { /* 忽略 */ }
-  try { appendCandidate(base64Decode(token)); } catch (err) { /* 忽略 */ }
-  try { appendCandidate(base64RawDecode(token)); } catch (err) { /* 忽略 */ }
-  appendCandidate(Buffer.from(String(token), 'utf8'));
+  try { appendCandidate(hexDecode(token)); } catch (err) { /* ignore */ }
+  try { appendCandidate(base64Decode(token)); } catch (err) { /* ignore */ }
+  try { appendCandidate(base64RawDecode(token)); } catch (err) { /* ignore */ }
+  appendCandidate(Buffer.from(String(token), "utf8"));
 
   for (const candidate of candidates) {
     const len = candidate.length;
